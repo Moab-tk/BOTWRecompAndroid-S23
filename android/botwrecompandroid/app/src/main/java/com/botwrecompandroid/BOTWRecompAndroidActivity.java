@@ -134,6 +134,14 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
                     if (lib.exists()) try (InputStream in = new FileInputStream(lib)) {
                         copy(in, new File(getExternalFilesDir(null), "botwgame-export.so"));
                     }
+                    // (S23) also 1.6.0 / 1.8.2 / 1.9.0's, in internal storage v<version>/ (runtime/paths.c
+                    // rt_version_game_lib): compared with one built on the PC
+                    for (String v : new String[] {"v160", "v182", "v190"}) {
+                        File vl = new File(new File(getFilesDir(), v), "botwgame.so");
+                        if (vl.exists()) try (InputStream in = new FileInputStream(vl)) {
+                            copy(in, new File(getExternalFilesDir(null), "botwgame-export-" + v + ".so"));
+                        }
+                    }
                 }
             }
         } catch (IOException | ErrnoException e) {
