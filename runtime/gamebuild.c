@@ -27,7 +27,7 @@
 // function, at -O0: HEAVY_LINES) took 6-8 GB on the POCO F7 Ultra for over 20 minutes, until Android ended the app
 // ("swap is low and thrashing", 2026-10-27) - on the PC's NDK clang with those flags, 23 GB and a failure; without
 // them 1.45 GB in 19 s. None of it belongs in the game code (UBSan also checks every operation at run time).
-#define GAMELIB_CFLAGS "-target aarch64-linux-musl -mcpu=cortex_x1+i8mm+bf16+fp16fml+sha3+flagm+sb -O1 -fno-strict-aliasing -Wno-return-type -Wno-unused-label -fvisibility=hidden -fPIC -mllvm -dag-maps-huge-region=500 -fno-sanitize=undefined -fno-stack-protector -g0"
+#define GAMELIB_CFLAGS "-target aarch64-linux-musl -mcpu=cortex_x3-v9a-sve-sve2 -O1 -fno-strict-aliasing -Wno-return-type -Wno-unused-label -fvisibility=hidden -fPIC -mllvm -dag-maps-huge-region=500 -fno-sanitize=undefined -fno-stack-protector -g0"
 #define GAMELIB_SHARED "-target aarch64-linux-musl -shared -nostdlib -Wl,-z,max-page-size=16384"
 #endif
 // From the Makefile: the flags the game code is compiled and linked with (as `make` builds it in a source checkout)
