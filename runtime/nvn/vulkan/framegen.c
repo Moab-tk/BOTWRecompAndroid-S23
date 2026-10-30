@@ -244,13 +244,14 @@ static bool seq_done(uint64_t seq) {
     return !seq || (vkGetSemaphoreCounterValue(g_vk.dev, g_vk.timeline, &v) == VK_SUCCESS && v >= seq);
 }
 
-int fg_frame_start(VkExtent2D extent, bool gens_ok) {
+int fg_frame_start(VkExtent2D extent, bool game_frame) {
     int want = wanted_gens(), st = atomic_load(&g_state);
     if (!want) {
         if (st == FG_READY) stop();
         if (st == FG_FAILED) atomic_store(&g_state, FG_OFF), g_status[0] = 0;
         return -1;
     }
+    if (!game_frame) return -1;  // (the start screen, a menu over a still game: not started, nothing copied)
     int key = wanted_key(want);
     if (st == FG_FAILED) {
         if (key == g_failed_key) return -1;  // (a changed setting tries again)
@@ -287,7 +288,7 @@ int fg_frame_start(VkExtent2D extent, bool gens_ok) {
     uint64_t now = plat_now_ns();
     bool gap = F.last_ns && now - F.last_ns > GAP_NS;
     F.last_ns = now;
-    return gens_ok && !gap && !framepace_in_menu() && !framepace_on_title() ? F.gens : 0;
+    return !gap && !framepace_in_menu() && !framepace_on_title() ? F.gens : 0;
 }
 
 static VkImageMemoryBarrier2 barrier(VkImage img, VkImageLayout from, VkImageLayout to, uint32_t src_q, uint32_t dst_q,

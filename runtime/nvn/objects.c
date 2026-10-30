@@ -1385,9 +1385,9 @@ int64_t rt_frame_ticks(int64_t ticks) {
     return ticks > cap ? cap : ticks;
 }
 
-// (S23) when the latest paced frame should be on screen (CLOCK_MONOTONIC ns; 0: none): vulkan/device.c vk_frame_end
-uint64_t g_present_due_ns;
-uint64_t g_present_grid_ns;  // (its time on the pace's grid: frame generation sets its own times from it)
+// (S23) the paced frame's time on the grid (CLOCK_MONOTONIC ns; 0: none): vulkan/device.c backend_present takes it with
+// that frame, so it can't reach another one on the render thread
+uint64_t g_present_grid_ns;
 
 #ifdef __ANDROID__
 int g_present_interval = 1;  // the game's latest (1: 60 fps, 2: 30 fps): the frame pacer (vulkan/exec.c)
@@ -1455,15 +1455,6 @@ NVN(nvnQueuePresentTexture) {
             g_blocked_ns += t1 - t0;
             last = last && t1 < target + period ? target : t1;
             framepace_presented(last, last == target);
-            // (S23) on screen a fixed delay after its grid time: room for the GPU to finish it. Half a period by default
-            // (a whole one added its 33 ms to every button press); a frame that takes longer just shows when it's ready,
-            // as without this. LARECOMP_PRESENT_DELAY_MS=<ms>.
-            static int64_t delay_ns = -1;
-            if (delay_ns < 0) {
-                const char *e = getenv("LARECOMP_PRESENT_DELAY_MS");
-                delay_ns = e ? (int64_t)(atof(e) * 1e6) : 0;
-            }
-            __atomic_store_n(&g_present_due_ns, last + (delay_ns > 0 ? (uint64_t)delay_ns : period / 2), __ATOMIC_RELAXED);
             __atomic_store_n(&g_present_grid_ns, last, __ATOMIC_RELAXED);
         } else if (on) {
             uint64_t want = last_vs + (uint64_t)n, t0 = plat_now_ns();

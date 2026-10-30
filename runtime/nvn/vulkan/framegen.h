@@ -10,9 +10,9 @@
 bool fg_dll_present(void);          // the player's Lossless.dll is imported
 const char *fg_status(void);        // for Settings: why generation stopped ("" when nothing went wrong)
 bool fg_swapchain_wanted(void);     // the window needs what generated frames take (FIFO, more images, transfers)
-// A real frame is starting its way out (render thread). gens_ok: generated frames may be shown for it.
+// A real frame is starting its way out (render thread). game_frame: a paced frame of the game.
 // Returns how many to generate (0: history only), or -1: this frame goes the normal way (off, starting, busy).
-int fg_frame_start(VkExtent2D extent, bool gens_ok);
+int fg_frame_start(VkExtent2D extent, bool game_frame);
 void fg_copy_in(VkCommandBuffer cb, VkImage window_image, VkExtent2D extent);  // (the image in TRANSFER_SRC layout)
 VkSemaphore fg_in_semaphore(void);  // signalled by the submission holding fg_copy_in
 int fg_run(int gens, int ready_fd[FG_MAX]);  // after that submission. Generated frames, or -1 (generation ended itself)

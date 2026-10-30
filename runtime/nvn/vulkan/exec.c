@@ -786,7 +786,7 @@ void vk_gpuprof_report(void) {
 
 // Submit the pending work (if any). wait/signal: binary semaphores for presentation (may be null).
 // (S23) wait2 / signal2: frame generation's (device.c): a generated frame waits for its window image and its result
-void vk_submit_extra2(VkSemaphore wait, VkSemaphore wait2, VkSemaphore signal, VkSemaphore signal2) {
+void vk_submit_extra2(VkSemaphore wait, VkSemaphore wait2, VkSemaphore signal, VkSemaphore signal2, VkPipelineStageFlags2 wait_stage) {
     vk_end_pass();
     Sub *s = sub();
     if (!s->main_begun && !s->upload_begun && !wait && !signal) return;
@@ -817,7 +817,6 @@ void vk_submit_extra2(VkSemaphore wait, VkSemaphore wait2, VkSemaphore signal, V
                                      .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT},
                                     {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = signal2,
                                      .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT}};
-    VkPipelineStageFlags2 wait_stage = wait2 ? VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSemaphoreSubmitInfo wt[2] = {{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = wait, .stageMask = wait_stage},
                                    {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = wait2, .stageMask = wait_stage}};
     VkSubmitInfo2 si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = (uint32_t)n, .pCommandBufferInfos = cbs,
@@ -859,7 +858,7 @@ void vk_submit_extra2(VkSemaphore wait, VkSemaphore wait2, VkSemaphore signal, V
 
 void vk_submit_extra(VkSemaphore wait, VkSemaphore signal, VkCommandBuffer extra) {
     (void)extra;
-    vk_submit_extra2(wait, VK_NULL_HANDLE, signal, VK_NULL_HANDLE);
+    vk_submit_extra2(wait, VK_NULL_HANDLE, signal, VK_NULL_HANDLE, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 }
 void renderer_submit(void) { vk_submit_extra(VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE); }
 
@@ -1098,10 +1097,10 @@ static pthread_cond_t jobs_cond = PTHREAD_COND_INITIALIZER;
 #include <sys/syscall.h>
 #include <sys/resource.h>
 // (S23) A shader worker behind the game: low priority, and off the fastest cores (the prime core: the Galaxy S23's
-// Cortex-X3) - entering an area, the four workers building dozens of pipelines took the cores the game's and the
-// render thread's frames needed, and the frames came in bursts of 50+ ms (measured playing, 2026-10-29). Only these
-// threads move: the game's own stay where the scheduler puts them (android.c LARECOMP_PIN). LARECOMP_SHADER_WORKERS_LOW=0:
-// as before.
+// Cortex-X3). An experiment against the bursts of 50+ ms frames seen playing (2026-10-29); the workers competing with the
+// game for those cores is a suspicion, not a measurement. Its cost: draws that wait for a shader wait longer (the
+// render thread spins below). Only these threads move: the game's own stay where the scheduler puts them
+// (android.c LARECOMP_PIN). LARECOMP_SHADER_WORKERS_LOW=0: as before.
 static void worker_behind_game(void) {
     static int on = -1;
     if (on < 0) on = !getenv("LARECOMP_SHADER_WORKERS_LOW") || atoi(getenv("LARECOMP_SHADER_WORKERS_LOW"));

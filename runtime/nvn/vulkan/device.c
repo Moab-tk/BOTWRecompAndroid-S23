@@ -1047,9 +1047,9 @@ static void android_create_surface(struct ANativeWindow *aw) {
     surface_aw = aw;
 }
 
-// (S23) The window's frame rate told to Android (the pace's: 30 or 60). A test, off by default: on the Galaxy S23
-// Ultra it put every frame on a 33.3 ms step, so one that missed its turn stayed for 66.7 ms, about 7% of them
-// (2026-10-30; without it a miss costs one 8.3 ms refresh). LARECOMP_SET_FRAME_RATE=1: on.
+// (S23) The window's frame rate told to Android (the pace's: 30 or 60). A test, off by default: with it the Galaxy S23
+// Ultra showed frames at exactly 33.3 or 66.7 ms - measured with the CPU and GPU underclocked by hand (2026-10-30), so
+// what it costs a normal phone is not known yet. LARECOMP_SET_FRAME_RATE=1: on.
 #include <android/native_window.h>
 static void android_set_frame_rate(void) {
     static int on = -1;
@@ -1251,8 +1251,21 @@ static uint64_t fg_delay_ns(uint64_t period) {
     return ms10 > 0 ? (uint64_t)ms10 * 100000ull : period;
 }
 
+// (S23) How long after its grid time a frame goes out: room for the GPU to finish it. Half a period by default (a whole
+// one adds its 33 ms to every button press); a frame that takes longer shows when ready, as without this.
+// LARECOMP_PRESENT_DELAY_MS=<ms>.
+static uint64_t present_delay_ns(void) {
+    extern uint64_t framepace_period_ns(void);
+    static long long ms10 = -1;
+    if (ms10 < 0) ms10 = getenv("LARECOMP_PRESENT_DELAY_MS") ? (long long)(atof(getenv("LARECOMP_PRESENT_DELAY_MS")) * 10) : 0;
+    return ms10 > 0 ? (uint64_t)ms10 * 100000ull : framepace_period_ns() / 2;
+}
+
+static uint64_t g_frame_grid;  // the frame being presented (render thread): vk_present_set_grid
+void vk_present_set_grid(uint64_t grid) { g_frame_grid = grid; }
+
 static uint32_t g_present_id;
-void vk_submit_extra2(VkSemaphore wait, VkSemaphore wait2, VkSemaphore signal, VkSemaphore signal2);
+void vk_submit_extra2(VkSemaphore wait, VkSemaphore wait2, VkSemaphore signal, VkSemaphore signal2, VkPipelineStageFlags2 wait_stage);
 
 // A generated frame into a window image of its own, shown at `due`. ready_fd: the library's sync file (-1: it is done).
 // No window image at once: this one is dropped - the real frame is what must not wait.
@@ -1282,7 +1295,7 @@ static void fg_show(int i, int ready_fd, uint64_t due) {
     if (!done_sem[img]) done_sem[img] = binary_semaphore();
     seqs[r] = vk_pending_seq();
     fg_out_used(seqs[r]);
-    vk_submit_extra2(acq[r], wait2, done_sem[img], VK_NULL_HANDLE);
+    vk_submit_extra2(acq[r], wait2, done_sem[img], VK_NULL_HANDLE, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);  // (a transfer waits)
     VkPresentTimeGOOGLE t = {.presentID = ++g_present_id, .desiredPresentTime = due};
     VkPresentTimesInfoGOOGLE times = {.sType = VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE, .swapchainCount = 1, .pTimes = &t};
     VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .pNext = &times, .waitSemaphoreCount = 1,
@@ -1305,8 +1318,8 @@ void vk_frame_end(const char *shot_path) {
     if (shot_path) save_window_image(cb, &shot);
 #ifdef __ANDROID__
     // (S23) frame generation (framegen.c): a copy of the finished frame goes to its library
-    extern uint64_t g_present_grid_ns;
-    uint64_t grid = __atomic_exchange_n(&g_present_grid_ns, 0, __ATOMIC_RELAXED);
+    uint64_t grid = g_frame_grid;  // (0: not a paced game frame - the start screen, a menu drawn over a still game)
+    g_frame_grid = 0;
     int fg_gens = shot_path ? -1 : fg_frame_start(g_vk.sc_extent, grid != 0);
     if (!g_sc_framegen) fg_gens = -1;
     if (fg_gens >= 0) {
@@ -1321,7 +1334,8 @@ void vk_frame_end(const char *shot_path) {
     if (!done_sem[img]) done_sem[img] = binary_semaphore();
     uint64_t seq = vk_pending_seq();
 #ifdef __ANDROID__
-    vk_submit_extra2(cur_frame.acquired, VK_NULL_HANDLE, done_sem[img], fg_gens >= 0 ? fg_in_semaphore() : VK_NULL_HANDLE);
+    vk_submit_extra2(cur_frame.acquired, VK_NULL_HANDLE, done_sem[img], fg_gens >= 0 ? fg_in_semaphore() : VK_NULL_HANDLE,
+                     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     uint64_t fg_due = 0;  // (the real frame's time, after the generated ones)
     if (fg_gens >= 0) {
         int ready[FG_MAX];
@@ -1338,17 +1352,15 @@ void vk_frame_end(const char *shot_path) {
                            .swapchainCount = 1, .pSwapchains = &g_vk.swapchain, .pImageIndices = &img};
 #ifdef __ANDROID__
     uint64_t trace_start = vk_timing_trace_on() ? SDL_GetTicksNS() : 0;
-    // (S23) when to show it: the frame pacer's grid time plus a fixed delay (nvn/objects.c g_present_due_ns), so a GPU
-    // that finishes a little early or late still lands on the same refresh - with a 120 Hz screen and MAILBOX, frames
-    // went out at 25 / 41.7 ms instead of 33.3 (measured playing, 2026-10-29). Taken once: other windows' frames get none.
+    // (S23) when to show it: the frame's time on the pace's grid plus a fixed delay, so a GPU that finishes a little
+    // early or late can still land on the same refresh - with a 120 Hz screen and MAILBOX, frames went out at 25 / 41.7 ms
+    // instead of 33.3 (measured playing, 2026-10-29). Frames that aren't paced have no time.
     VkPresentTimeGOOGLE ptime;
     VkPresentTimesInfoGOOGLE ptimes;
     {
-        extern uint64_t g_present_due_ns;
         extern int vk_ab(const char *what);
         extern uint64_t plat_now_ns(void);
-        uint64_t due = __atomic_exchange_n(&g_present_due_ns, 0, __ATOMIC_RELAXED);
-        if (fg_due) due = fg_due;
+        uint64_t due = fg_due ? fg_due : grid ? grid + present_delay_ns() : 0;
         int ab = vk_ab("timing");  // (LARECOMP_AB=<frames>:timing: -1 when not under test)
         static int last_ab = -2;
         if (ab != last_ab && ab >= 0) LOG("[ab] timing %d from %llu\n", ab, (unsigned long long)plat_now_ns());
@@ -1409,7 +1421,7 @@ static uint64_t frames, total_frames, g_frame_counter;
 static uint64_t g_game_frames;
 bool vk_async_on(void);
 bool vk_async_is_render_thread(void);
-void vk_async_present(NvnTexture *t);
+void vk_async_present(NvnTexture *t, uint64_t grid);
 void vk_async_drain(void);
 uint64_t renderer_present_count(void) { return vk_async_on() && !vk_async_is_render_thread() ? g_game_frames : total_frames; }
 #else
@@ -1443,12 +1455,15 @@ static void present_game_half(void) {
 
 void vk_present_now(NvnTexture *t);
 void backend_present(NvnTexture *t) {
+    extern uint64_t g_present_grid_ns;  // (nvn/objects.c: this frame's, set just before)
+    uint64_t grid = __atomic_exchange_n(&g_present_grid_ns, 0, __ATOMIC_RELAXED);
     if (!vk_async_on()) {
+        vk_present_set_grid(grid);
         vk_present_now(t);
         return;
     }
     g_game_frames++;
-    vk_async_present(t);  // (the window's half, on the render thread: vk_present_now)
+    vk_async_present(t, grid);  // (the window's half, on the render thread: vk_present_now)
     present_game_half();
 }
 #endif

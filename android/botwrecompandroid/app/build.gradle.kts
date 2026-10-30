@@ -117,6 +117,8 @@ val prepareBotwRecompAndroid by tasks.registering {
             if (deps.resolve("lib/$lib").exists()) deps.resolve("lib/$lib").copyTo(out.resolve("jniLibs/arm64-v8a/$lib"), overwrite = true)
         font.copyTo(out.resolve("assets/res/Baloo2-SemiBold.ttf"), overwrite = true)
         deps.resolve("fonts/DejaVuSans.ttf").copyTo(out.resolve("assets/res/DejaVuSans.ttf"), overwrite = true)
+        // (S23: frame generation's library and what is linked into it, ferramentas/compilar_bloodframe.sh)
+        if (deps.resolve("licenses").exists()) deps.resolve("licenses").copyRecursively(out.resolve("assets/licenses"), overwrite = true)
         icon.copyTo(out.resolve("assets/res/icon.png"), overwrite = true)
         background.copyTo(out.resolve("assets/res/launcher-background.png"), overwrite = true)
         touchSkin.copyTo(out.resolve("assets/res/sheikah-touch-atlas.png"), overwrite = true)
