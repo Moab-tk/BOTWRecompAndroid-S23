@@ -1886,9 +1886,11 @@ void vk_shaders_init(void);
 static void quick_exit_handler(void) {
     static int trace = -1;
     if (trace < 0) trace = getenv("LARECOMP_VK_TRACE") != NULL;
-    if (trace) LOG("[vk] exit: waiting for the GPU\n");
     if (g_vk.dev) {
+#ifndef __ANDROID__
+        if (trace) LOG("[vk] exit: waiting for the GPU\n");
         vkDeviceWaitIdle(g_vk.dev);
+#endif
         if (trace) LOG("[vk] exit: saving the pipeline cache\n");
         vk_pipeline_cache_save();
     }
@@ -1935,7 +1937,6 @@ const char *vk_gpu_name(void) { return g_vk.props.deviceName; }
 
 void ui_window_init(void) {
     if (window) return;
-    atexit(quick_exit_handler);
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 #ifdef __ANDROID__
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");  // (the back button opens the menu: ui/touch_controls.mm)
@@ -2039,6 +2040,7 @@ void ui_window_init(void) {
     create_swapchain();
     vk_exec_init();
     vk_shaders_init();
+    atexit(quick_exit_handler);
 }
 
 SDL_Window *ui_window(void) { return window; }
@@ -2150,6 +2152,7 @@ int ui_run(void) {
 #endif
             if (e.type == SDL_EVENT_QUIT) {
                 LOG("window closed\n");
+                quick_exit_handler();
                 exit(0);
             }
             extern bool input_user_blocked(const SDL_Event *e);

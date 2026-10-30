@@ -4372,9 +4372,9 @@ static void gcopy_retire(uint64_t done) {
 // and copied into the slot by the GPU at the start of the submission. What a shader stored also goes back to guest
 // memory once its submission is done (the game reads some of it as uniform buffers, vertices, textures), and to the
 // range's last-uploaded copy, so that isn't taken for the CPU's write.
-typedef struct { uint64_t lo, hi; } GcRange;  // heap offsets, 256-aligned
+typedef struct { uint64_t lo, hi; bool store; } GcRange;  // heap offsets, 256-aligned
 #define GA_SIZE (128ull << 20)  // (the minimum maxStorageBufferRange)
-#define GA_RES (32ull << 20)    // [0, GA_RES): resident slots; the rest: the ring
+#define GA_RES (48ull << 20)    // [0, GA_RES): resident slots; the rest: the ring
 #define GA_SEG (8ull << 20)
 #define GA_NRES 512
 typedef struct { uint64_t lo, hi, off, checked; uint8_t *shadow; bool live; uint64_t *bseq; } GaRes;  // (bseq: per 256 B)
@@ -4483,7 +4483,7 @@ static GaRes *gres_get(uint64_t lo, uint64_t hi, bool create) {
             if (e->hi > uhi) { uhi = e->hi; grew = true; }
         }
     }
-    if (no && in_pass) return NULL;  // (merging copies slot to slot: not inside a render pass)
+    if (no && in_pass) vk_end_pass();  // (merging copies slot to slot: outside any render pass)
     uint64_t len = uhi - ulo;
     int slot = -1;
     for (int i = 0; i < ga_nres; i++) if (!ga_res[i].live && !ga_res[i].shadow) { slot = i; break; }
@@ -4624,7 +4624,7 @@ static bool gres_prepare(const GcRange *r, int m, bool store) {
     } while (0)
     for (int i = 0; i < m; i++) {
         uint64_t lo = r[i].lo, hi = r[i].hi;
-        if (store) {  // a storing shader's ranges: resident from now on
+        if (r[i].store) {  // a storing shader's bound ranges: resident from now on
             GaRes *e = gres_get(lo, hi, true);
             if (!e) { stat_gres_fail[0]++; return false; }
             gres_sync(e);
@@ -4651,12 +4651,19 @@ static bool gres_prepare(const GcRange *r, int m, bool store) {
             }
             if (in) {
                 uint64_t end = hi < in->hi ? hi : in->hi;
+                if (end < hi && n == GMAP_MAX - 1) {  // (one table slot left: copy the whole tail rather than overflow)
+                    uint64_t off = ga_load_copy(at, hi - at);
+                    if (off == ~0ull) { stat_gres_fail[hi - at > GA_SEG ? 3 : 2]++; return false; }
+                    GRES_ADD(at, hi - at, off);
+                    break;
+                }
                 gres_sync(in);
                 GRES_ADD(at, end - at, in->off + (at - in->lo));
                 stat_gres_res++;
                 at = end;
                 continue;
             }
+            if (next < hi && n == GMAP_MAX - 1) next = hi;
             uint64_t off = ga_load_copy(at, next - at);
             if (off == ~0ull) { stat_gres_fail[next - at > GA_SEG ? 3 : 2]++; return false; }
             GRES_ADD(at, next - at, off);
@@ -4680,11 +4687,16 @@ static VkDescriptorBufferInfo gmiss_info(void) {
 }
 
 static void gres_reset(void) {
+    pthread_mutex_lock(&gc_lock);
+    gc_nback = 0;  // (their shadow / bseq pointers and guest addresses belong to the boot being torn down)
+    pthread_mutex_unlock(&gc_lock);
     for (int i = 0; i < ga_nres; i++) { free(ga_res[i].shadow); free(ga_res[i].bseq); }
     memset(ga_res, 0, sizeof ga_res);
     ga_nres = 0;
     ga_res_top = 0;
     ga_head = GA_RES;
+    ga_ndirty = 0;
+    gl_n = 0;
     memset(ga_seg_seq, 0, sizeof ga_seg_seq);
 }
 
@@ -4802,22 +4814,32 @@ static void gcopy_prepare(unsigned stage_mask, bool store) {
             lo = lo > (uint64_t)margin ? (lo - (uint64_t)margin) & ~255ull : 0;
             int k = n++;
             while (k > 0 && r[k - 1].lo > lo) { r[k] = r[k - 1]; k--; }
-            r[k].lo = lo; r[k].hi = hi;
+            r[k] = (GcRange){lo, hi, store};
         }
     }
-    for (int i = 0; i < gl_n && n < 6 * 16; i++) {  // (the learned ranges: reached through pointers - gres_learn)
-        int k = n++;
-        while (k > 0 && r[k - 1].lo > gl_learned[i].lo) { r[k] = r[k - 1]; k--; }
-        r[k] = gl_learned[i];
-    }
     int m = 0;
-    for (int i = 0; i < n; i++) {  // merged (nearby ranges too: a table entry costs more than a small gap)
+    for (int i = 0; i < n; i++) {  // merged (nearby bound ranges too: a table entry costs more than a small gap)
         if (m && r[i].lo <= r[m - 1].hi + 4096) { if (r[i].hi > r[m - 1].hi) r[m - 1].hi = r[i].hi; }
         else r[m++] = r[i];
     }
-    if (m > GMAP_MAX) {  // (more ranges than the table holds: one covering them all)
-        r[0].hi = r[m - 1].hi;
-        m = 1;
+    if (m > GMAP_MAX) m = GMAP_MAX;
+    // The learned ranges (reached through pointers - gres_learn): newest first while table slots remain, never
+    // expanding a storing range's write-back or collapsing unrelated heap regions into one multi-megabyte span.
+    for (int i = gl_n - 1; i >= 0 && m < GMAP_MAX - 2; i--) {
+        uint64_t lo = gl_learned[i].lo, hi = gl_learned[i].hi;
+        bool covered = false;
+        for (int k = 0; k < m && !covered; k++) {
+            if (r[k].lo <= lo && hi <= r[k].hi) { covered = true; break; }
+            if (!r[k].store && lo <= r[k].hi + 4096 && hi + 4096 >= r[k].lo) {
+                if (lo < r[k].lo) r[k].lo = lo;
+                if (hi > r[k].hi) r[k].hi = hi;
+                covered = true;
+            }
+        }
+        if (covered) continue;
+        int k = m++;
+        while (k > 0 && r[k - 1].lo > lo) { r[k] = r[k - 1]; k--; }
+        r[k] = (GcRange){lo, hi, false};
     }
     uint64_t total = 0;
     for (int i = 0; i < m; i++) total += (r[i].hi - r[i].lo + 255) & ~255ull;
@@ -4847,7 +4869,7 @@ static void gcopy_prepare(unsigned stage_mask, bool store) {
         gmap_tab[i * 4 + 0] = (uint32_t)r[i].lo;
         gmap_tab[i * 4 + 1] = (uint32_t)len;
         gmap_tab[i * 4 + 2] = (uint32_t)(off >> 2);
-        if (store && gc_nback < 256)
+        if (r[i].store && !gres_init() && gc_nback < 256)
             gc_back[gc_nback++] = (GcBack){(const uint8_t *)gc_span.ptr + off, HEAP_BASE + r[i].lo, len, seq, NULL, NULL};
         off += (len + 255) & ~255ull;
     }
@@ -5136,6 +5158,12 @@ void vk_exec_reset(void) {
     gcopy_mode = !g_vk.host_import && !getenv("LARECOMP_VK_NO_GCOPY");  // (until the next heap is placed: vk_heap_place)
     gres_reset();  // (the arena's resident ranges: keyed by the old heap's addresses)
 #endif
+    pthread_mutex_lock(&wb_lock);
+    for (int i = 0; i < WB_SLOTS; i++) wb_ent[i].busy = false;
+    pthread_mutex_unlock(&wb_lock);
+    pthread_mutex_lock(&cq_lock);
+    for (int i = 0; i < SUBS; i++) { cq[i].n = 0; cq[i].ts = false; }
+    pthread_mutex_unlock(&cq_lock);
     for (int i = 0; i < VC_TAB; i++)  // (the vertex cache: copies of the old pages)
         if (vc_tab[i].buf) vmaDestroyBuffer(g_vk.vma, vc_tab[i].buf, vc_tab[i].mem);
     memset(vc_tab, 0, sizeof vc_tab);
