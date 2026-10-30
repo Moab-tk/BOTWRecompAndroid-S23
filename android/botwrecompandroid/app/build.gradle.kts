@@ -21,8 +21,8 @@ android {
         applicationId = "com.botwrecomp.android.s23"
         minSdk = 30
         targetSdk = 36
-        versionCode = 26
-        versionName = "0.2.3-s23-b4"
+        versionCode = 27
+        versionName = "0.2.3-s23-b5"
         ndk {
             abiFilters += "arm64-v8a"
         }
@@ -95,7 +95,7 @@ val prepareBotwRecompAndroid by tasks.registering {
     val icon = repo.resolve("assets/artwork/triforce-icon-v2.png")
     val background = repo.resolve("assets/artwork/great-plateau-background-v2.png")
     val touchSkin = repo.resolve("assets/artwork/sheikah-touch-atlas-v1.png")
-    val libs = listOf("libSDL3.so", "libshaderc_shared.so", "libavcodec.so", "libavformat.so", "libavutil.so", "libswscale.so")
+    val libs = listOf("libSDL3.so", "libshaderc_shared.so", "libavcodec.so", "libavformat.so", "libavutil.so", "libswscale.so", "libbloodframe.so")
     inputs.files(smaa, font, icon, background, touchSkin)
     inputs.files(libs.map { deps.resolve("lib/$it") }.filter { it.exists() })
     if (deps.resolve("gen").exists()) inputs.dir(deps.resolve("gen"))  // (the game code's builder, below)

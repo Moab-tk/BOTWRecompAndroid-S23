@@ -1387,6 +1387,7 @@ int64_t rt_frame_ticks(int64_t ticks) {
 
 // (S23) when the latest paced frame should be on screen (CLOCK_MONOTONIC ns; 0: none): vulkan/device.c vk_frame_end
 uint64_t g_present_due_ns;
+uint64_t g_present_grid_ns;  // (its time on the pace's grid: frame generation sets its own times from it)
 
 #ifdef __ANDROID__
 int g_present_interval = 1;  // the game's latest (1: 60 fps, 2: 30 fps): the frame pacer (vulkan/exec.c)
@@ -1463,6 +1464,7 @@ NVN(nvnQueuePresentTexture) {
                 delay_ns = e ? (int64_t)(atof(e) * 1e6) : 0;
             }
             __atomic_store_n(&g_present_due_ns, last + (delay_ns > 0 ? (uint64_t)delay_ns : period / 2), __ATOMIC_RELAXED);
+            __atomic_store_n(&g_present_grid_ns, last, __ATOMIC_RELAXED);
         } else if (on) {
             uint64_t want = last_vs + (uint64_t)n, t0 = plat_now_ns();
             while (__atomic_load_n(&g_vsync_count, __ATOMIC_RELAXED) < want) usleep(500);

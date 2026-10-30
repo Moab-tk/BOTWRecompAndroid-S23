@@ -889,6 +889,19 @@ extern "C" JNIEXPORT void JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidAc
     set_job_detail(detail);
 }
 
+// (S23) Settings > Files: the Lossless.dll imported (0), not one (1), removed (2)
+static std::string g_fg_msg;
+static bool g_fg_restart;
+extern "C" bool fg_dll_present(void);
+extern "C" const char *fg_status(void);
+extern "C" JNIEXPORT void JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidActivity_nativeLosslessPicked(JNIEnv *, jclass, jint result) {
+    pthread_mutex_lock(&g_lock);
+    g_fg_msg = tr(result == 0 ? "Lossless.dll imported. Restart to use it." : result == 2 ? "Lossless.dll removed. Restart to finish." :
+                  "That file isn't a Lossless.dll.");
+    g_fg_restart = result != 1;
+    pthread_mutex_unlock(&g_lock);
+}
+
 extern "C" JNIEXPORT void JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidActivity_nativeDriverPicked(JNIEnv *env, jclass, jstring name) {
     const char *n = env->GetStringUTFChars(name, NULL);
     pthread_mutex_lock(&g_lock);
@@ -1453,6 +1466,37 @@ static void prelaunch_tab(float sc) {
             if (restart) {
                 ImGui::SameLine();
                 if (ImGui::Button(tr("Restart now"))) android_call("restartApp");
+            }
+        }
+    }
+    ImGui::Spacing();
+    ImGui::Spacing();
+    heading("Frame generation (Lossless Scaling)");
+    {   // (S23: the file is the player's own and stays on the phone: BOTWRecompAndroidActivity.importLossless)
+        bool have = fg_dll_present();
+        ImGui::Text("%s", tr(have ? "Lossless.dll: imported" : "Lossless.dll: not imported"));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextDisabled("%s", tr("Generated frames between the real ones (the switch is in the Video tab). It needs the "
+                                     "Lossless.dll of your own copy of Lossless Scaling, from its Steam folder. The file "
+                                     "stays on this phone and is never part of the app."));
+        if (*fg_status()) ImGui::TextColored(ImVec4(1.0f, 0.62f, 0.3f, 1.0f), tr("Frame generation stopped: %s"), fg_status());
+        ImGui::PopTextWrapPos();
+        if (ImGui::Button(tr("Choose Lossless.dll"))) android_call("pickLossless");
+        if (have) {
+            ImGui::SameLine();
+            if (ImGui::Button(tr("Remove Lossless.dll"))) android_call("removeLossless");
+        }
+        pthread_mutex_lock(&g_lock);
+        std::string msg = g_fg_msg;
+        bool restart = g_fg_restart;
+        pthread_mutex_unlock(&g_lock);
+        if (!msg.empty()) {
+            ImGui::Text("%s", msg.c_str());
+            if (restart) {
+                ImGui::SameLine();
+                ImGui::PushID("fg");
+                if (ImGui::Button(tr("Restart now"))) android_call("restartApp");
+                ImGui::PopID();
             }
         }
     }
