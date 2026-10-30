@@ -1087,8 +1087,46 @@ static Job *jobs_head, *jobs_tail;
 static pthread_mutex_t jobs_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t jobs_cond = PTHREAD_COND_INITIALIZER;
 
+#ifdef __ANDROID__
+#include <sys/syscall.h>
+#include <sys/resource.h>
+// (S23) A shader worker behind the game: low priority, and off the fastest cores (the prime core: the Galaxy S23's
+// Cortex-X3) - entering an area, the four workers building dozens of pipelines took the cores the game's and the
+// render thread's frames needed, and the frames came in bursts of 50+ ms (measured playing, 2026-10-29). Only these
+// threads move: the game's own stay where the scheduler puts them (android.c LARECOMP_PIN). LARECOMP_SHADER_WORKERS_LOW=0:
+// as before.
+static void worker_behind_game(void) {
+    static int on = -1;
+    if (on < 0) on = !getenv("LARECOMP_SHADER_WORKERS_LOW") || atoi(getenv("LARECOMP_SHADER_WORKERS_LOW"));
+    if (!on) return;
+    setpriority(PRIO_PROCESS, (id_t)gettid(), 10);
+    long mhz[64] = {0}, best = 0;
+    int n = 0;
+    for (int c = 0; c < 64; c++) {
+        char path[96];
+        snprintf(path, sizeof path, "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", c);
+        FILE *f = fopen(path, "re");
+        if (!f) continue;
+        if (fscanf(f, "%ld", &mhz[c]) != 1) mhz[c] = 0;
+        fclose(f);
+        if (mhz[c] > best) best = mhz[c];
+        n = c + 1;
+    }
+    unsigned long long set = 0;  // (the raw syscall's mask: cpu_set_t needs _GNU_SOURCE before this file's first include)
+    int k = 0;
+    for (int c = 0; c < n; c++)
+        if (mhz[c] && mhz[c] < best) set |= 1ull << c, k++;
+    long r = k ? syscall(__NR_sched_setaffinity, 0, sizeof set, &set) : -1;
+    static atomic_int logged;
+    if (!atomic_exchange(&logged, 1)) LOG("[vk] shader workers: nice 10, %d cores below %ld MHz (%s)\n", k, best / 1000, r ? "affinity not set" : "ok");
+}
+#endif
+
 static void *worker(void *a) {
     (void)a;
+#ifdef __ANDROID__
+    worker_behind_game();
+#endif
     for (;;) {
         pthread_mutex_lock(&jobs_lock);
         while (!jobs_head) pthread_cond_wait(&jobs_cond, &jobs_lock);

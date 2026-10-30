@@ -538,6 +538,15 @@ static void create_device(void) {
     if (fault) ext[n_ext++] = VK_EXT_DEVICE_FAULT_EXTENSION_NAME;
     g_fault_ext = fault;
 #ifdef __ANDROID__
+    // (S23) each frame shown on the pace's grid instead of at the first refresh after the GPU finished it (vk_frame_end;
+    // added before the map extensions: they must stay the last two). LARECOMP_PRESENT_TIMING=0: off.
+    {
+        const char *e = getenv("LARECOMP_PRESENT_TIMING");
+        g_vk.display_timing = (!e || atoi(e)) && has_ext(ep, ne, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
+        if (g_vk.display_timing) ext[n_ext++] = VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME;
+        LOG("[vk] present timing %s\n", g_vk.display_timing ? "on (VK_GOOGLE_display_timing)"
+                                        : e && !atoi(e) ? "off (LARECOMP_PRESENT_TIMING=0)" : "off: the driver lacks it");
+    }
     // LARECOMP_SHADER_STATS=1: each graphics pipeline's compiled shaders described in the log (registers, waves,
     // spills, instructions: exec.c build_pipeline), for finding what makes a translated shader slow on this GPU
     g_vk.exec_stats = getenv("LARECOMP_SHADER_STATS") &&
@@ -1010,6 +1019,25 @@ static void android_create_surface(struct ANativeWindow *aw) {
     surface_aw = aw;
 }
 
+// (S23) The window's frame rate told to Android (the pace's: 30 or 60), so the screen's refresh is chosen to match it
+// instead of a 120 Hz the frames only land on now and then. Again for a new window or a new pace.
+// LARECOMP_SET_FRAME_RATE=0: off.
+#include <android/native_window.h>
+static void android_set_frame_rate(void) {
+    static int on = -1;
+    if (on < 0) on = !getenv("LARECOMP_SET_FRAME_RATE") || atoi(getenv("LARECOMP_SET_FRAME_RATE"));
+    if (!on || !surface_aw) return;
+    extern int framepace_target(void);
+    static struct ANativeWindow *set_aw;
+    static int set_fps = -1;
+    int fps = framepace_target();
+    if (surface_aw == set_aw && fps == set_fps) return;
+    set_aw = surface_aw, set_fps = fps;
+    int r = ANativeWindow_setFrameRate(surface_aw, fps > 0 ? (float)fps : 0.0f,
+                                       ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+    LOG("[vk] window frame rate %d fps told to Android (%d)\n", fps, r);
+}
+
 static bool android_surface_ready(void) {  // false: no window to draw into now
     struct ANativeWindow *aw = android_window();
     if (!aw) { surface_lost = true; return false; }
@@ -1176,6 +1204,23 @@ void vk_frame_end(const char *shot_path) {
                            .swapchainCount = 1, .pSwapchains = &g_vk.swapchain, .pImageIndices = &img};
 #ifdef __ANDROID__
     uint64_t trace_start = vk_timing_trace_on() ? SDL_GetTicksNS() : 0;
+    // (S23) when to show it: the frame pacer's grid time plus a fixed delay (nvn/objects.c g_present_due_ns), so a GPU
+    // that finishes a little early or late still lands on the same refresh - with a 120 Hz screen and MAILBOX, frames
+    // went out at 25 / 41.7 ms instead of 33.3 (measured playing, 2026-10-29). Taken once: other windows' frames get none.
+    VkPresentTimeGOOGLE ptime;
+    VkPresentTimesInfoGOOGLE ptimes;
+    {
+        extern uint64_t g_present_due_ns;
+        uint64_t due = __atomic_exchange_n(&g_present_due_ns, 0, __ATOMIC_RELAXED);
+        static uint32_t present_id;
+        if (g_vk.display_timing && due) {
+            ptime = (VkPresentTimeGOOGLE){.presentID = ++present_id, .desiredPresentTime = due};
+            ptimes = (VkPresentTimesInfoGOOGLE){.sType = VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE, .swapchainCount = 1,
+                                                .pTimes = &ptime};
+            pi.pNext = &ptimes;
+        }
+        android_set_frame_rate();
+    }
 #endif
     VkResult r = vkQueuePresentKHR(g_vk.queue, &pi);
 #ifdef __ANDROID__
@@ -1678,7 +1723,9 @@ bool vk_adreno_8xx(const char *name) {
     if (!a) return false;
     while (*a && (*a < '0' || *a > '9')) a++;
     int n = atoi(a);
-    return n >= 800 && n < 900;
+    // (S23: the Adreno 740 too - the Galaxy S23 Ultra played with all three on by hand and drew right, 2026-10-29;
+    // not the 750, see above)
+    return (n >= 800 && n < 900) || n == 740;
 }
 // A Turnip path's setting (-1 Automatic, 1 on, 0 off) for this GPU
 bool vk_turnip_path_on(int setting) { return setting < 0 ? vk_adreno_8xx(g_vk.props.deviceName) : setting != 0; }
