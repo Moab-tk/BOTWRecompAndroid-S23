@@ -31,6 +31,7 @@
 #include "../platform.h"
 #include "../rt.h"
 #include "../../android/common/guest_window.h"
+#include "crash_file.h"
 
 uint64_t g_guest_lo;  // the window's start (rt.h GUEST_LO), set by plat_reserve_guest before main()
 
@@ -470,6 +471,15 @@ static void crash_handler(int sig, siginfo_t *si, void *ctx) {
         fprintf(stderr, "*** SIGSEGV code %d (%s), write %d, page tracking %d, odd write faults %llu\n", si->si_code,
                 si->si_code == SEGV_ACCERR ? "no access" : si->si_code == SEGV_MAPERR ? "not mapped" : "other", g_fault_wnr,
                 st, (unsigned long long)odd);
+    }
+    {   // (S23) first, before anything else can go wrong: <data root>/botwrecomp-crash.txt (crash_file.h)
+        static atomic_int written;
+        if (!atomic_exchange(&written, 1)) {
+            char path[1100];
+            snprintf(path, sizeof path, "%s/botwrecomp-crash.txt", rt_data_root());
+            crash_file_write(path, sig, si->si_code, fa, pc, lr, uc->uc_mcontext.sp, uc->uc_mcontext.regs[29],
+                             (const uint64_t *)uc->uc_mcontext.regs, 31);
+        }
     }
     char what[32];
     snprintf(what, sizeof what, "signal %d", sig);

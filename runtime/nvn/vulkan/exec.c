@@ -7225,7 +7225,9 @@ void renderer_save_texture_tex(TexBackend *b, const char *path) {
 // change); LARECOMP_LOG_PACE tags each frame "ab 0/1". Switches: split (no long-pass split), ubo (constant buffers
 // read in place), sgsr (Snapdragon GSR 1 for the scene instead of the setting's upscaler), nobarrier (no barrier at
 // the start of a pass: unsafe, what they cost), copy (feedback copies instead of in-place reads), chunk (submissions
-// every 0.5 ms of translation instead of LARECOMP_VK_CHUNK_US). -1: not under test.
+// every 0.5 ms of translation instead of LARECOMP_VK_CHUNK_US), timing (each frame shown at its asked-for time: device.c
+// vk_frame_end, which logs "[ab] timing" at each change), shadow (command pages without the lock: command_shadow.h).
+// -1: not under test.
 int vk_ab(const char *what) {
     int n = ab_n;
     static char w[32];

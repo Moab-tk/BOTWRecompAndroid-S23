@@ -1019,14 +1019,14 @@ static void android_create_surface(struct ANativeWindow *aw) {
     surface_aw = aw;
 }
 
-// (S23) The window's frame rate told to Android (the pace's: 30 or 60), so the screen's refresh is chosen to match it
-// instead of a 120 Hz the frames only land on now and then. Again for a new window or a new pace.
-// LARECOMP_SET_FRAME_RATE=0: off.
+// (S23) The window's frame rate told to Android (the pace's: 30 or 60). A test, off by default: on the Galaxy S23
+// Ultra it put every frame on a 33.3 ms step, so one that missed its turn stayed for 66.7 ms, about 7% of them
+// (2026-10-30; without it a miss costs one 8.3 ms refresh). LARECOMP_SET_FRAME_RATE=1: on.
 #include <android/native_window.h>
 static void android_set_frame_rate(void) {
     static int on = -1;
-    if (on < 0) on = !getenv("LARECOMP_SET_FRAME_RATE") || atoi(getenv("LARECOMP_SET_FRAME_RATE"));
-    if (!on || !surface_aw) return;
+    if (on < 0) on = getenv("LARECOMP_SET_FRAME_RATE") && atoi(getenv("LARECOMP_SET_FRAME_RATE"));
+    if (!on || !surface_aw || android_window() != surface_aw) return;  // (the window it was made for, still alive)
     extern int framepace_target(void);
     static struct ANativeWindow *set_aw;
     static int set_fps = -1;
@@ -1036,6 +1036,33 @@ static void android_set_frame_rate(void) {
     int r = ANativeWindow_setFrameRate(surface_aw, fps > 0 ? (float)fps : 0.0f,
                                        ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
     LOG("[vk] window frame rate %d fps told to Android (%d)\n", fps, r);
+}
+
+// (S23) LARECOMP_LOG_PRESENT=1: every 300 presents, how the asked-for times went - what picks the delay in
+// LARECOMP_PRESENT_DELAY_MS from measurements (late: shown over 1 ms after the time asked for)
+static void present_timing_log(void) {
+    static int on = -1;
+    if (on < 0) on = getenv("LARECOMP_LOG_PRESENT") != NULL;
+    static uint32_t n;
+    if (!on || ++n % 300) return;
+    VkPastPresentationTimingGOOGLE p[128];
+    uint32_t c = 128;
+    VkResult r = vkGetPastPresentationTimingGOOGLE(g_vk.dev, g_vk.swapchain, &c, p);
+    if ((r != VK_SUCCESS && r != VK_INCOMPLETE) || !c) {
+        LOG("[present] no past timings (%d, %u)\n", r, c);
+        return;
+    }
+    uint32_t late = 0;
+    double sum = 0, worst = 0, margin = 0;
+    for (uint32_t i = 0; i < c; i++) {
+        double d = ((double)p[i].actualPresentTime - (double)p[i].desiredPresentTime) / 1e6;
+        late += d > 1;
+        sum += d;
+        if (d > worst) worst = d;
+        margin += p[i].presentMargin / 1e6;
+    }
+    LOG("[present] last %u frames: %u late, shown %.1f ms after the time asked for (worst %.1f), margin %.1f ms\n", c, late,
+        sum / c, worst, margin / c);
 }
 
 static bool android_surface_ready(void) {  // false: no window to draw into now
@@ -1211,15 +1238,22 @@ void vk_frame_end(const char *shot_path) {
     VkPresentTimesInfoGOOGLE ptimes;
     {
         extern uint64_t g_present_due_ns;
+        extern int vk_ab(const char *what);
+        extern uint64_t plat_now_ns(void);
         uint64_t due = __atomic_exchange_n(&g_present_due_ns, 0, __ATOMIC_RELAXED);
+        int ab = vk_ab("timing");  // (LARECOMP_AB=<frames>:timing: -1 when not under test)
+        static int last_ab = -2;
+        if (ab != last_ab && ab >= 0) LOG("[ab] timing %d from %llu\n", ab, (unsigned long long)plat_now_ns());
+        last_ab = ab;
         static uint32_t present_id;
-        if (g_vk.display_timing && due) {
+        if (g_vk.display_timing && due && ab != 0) {
             ptime = (VkPresentTimeGOOGLE){.presentID = ++present_id, .desiredPresentTime = due};
             ptimes = (VkPresentTimesInfoGOOGLE){.sType = VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE, .swapchainCount = 1,
                                                 .pTimes = &ptime};
             pi.pNext = &ptimes;
         }
         android_set_frame_rate();
+        if (g_vk.display_timing) present_timing_log();
     }
 #endif
     VkResult r = vkQueuePresentKHR(g_vk.queue, &pi);
