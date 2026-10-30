@@ -106,6 +106,7 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
             copyIfChanged(new File(games, "botwgame.so.id"), new File(res, "botwgame.so.id"));
             setenv("LARECOMP_NATIVE_LIB_DIR", getApplicationInfo().nativeLibraryDir);
             setenv("LARECOMP_LAST_EXIT", lastExit());
+            setenv("LARECOMP_DRIVERS_DIR", new File(getExternalFilesDir(null), "drivers").getPath());
             File gen = new File(getFilesDir(), "gen");
             unpackGen(gen);
             setenv("LARECOMP_GEN_DIR", gen.getAbsolutePath());
@@ -1120,16 +1121,18 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
         }
         if (!DRIVER_FILE.matcher(name).find()) return "";
         try {
-            File dir = new File(ctx.getExternalFilesDir(null), "drivers");
-            deleteTree(dir);
+            File dir = new File(ctx.getExternalFilesDir(null), "drivers");  // (S23: the ones before stay, to pick from)
             dir.mkdirs();
             File dst = new File(dir, name);
             try (InputStream in = ctx.getContentResolver().openInputStream(f)) {
                 copy(in, dst);
             }
             if (driverKind(dst) == 0) {  // (named like one, but neither a zip nor a library)
-                deleteTree(dir);
+                dst.delete();
                 return "";
+            }
+            try (OutputStream o = new FileOutputStream(new File(dir, "active.txt"))) {
+                o.write(name.getBytes());
             }
             return name;
         } catch (Exception e) {
@@ -1252,9 +1255,22 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
         File src = new File(getExternalFilesDir(null), "drivers");
         src.mkdirs();
         File[] files = src.listFiles((d, n) -> DRIVER_FILE.matcher(n).find());
+        File[] unpacked = new File(getFilesDir(), "drivers").listFiles();  // (S23: the copy of one taken off the list)
+        if (unpacked != null) for (File u : unpacked) {
+            boolean kept = false;
+            if (files != null) for (File x : files) kept |= DRIVER_FILE.matcher(x.getName()).replaceAll("").equals(u.getName());
+            if (!kept) deleteTree(u);
+        }
         if (files == null || files.length == 0) return null;
         Arrays.sort(files);
         File f = files[0];
+        // (S23) the one picked in Settings > Files, "-": the system's; nothing picked: the first, as before
+        File active = new File(src, "active.txt");
+        if (active.exists()) {
+            String a = readSmall(active).trim();
+            if (a.equals("-")) return null;
+            for (File x : files) if (x.getName().equals(a)) f = x;
+        }
         File dir = new File(getFilesDir(), "drivers/" + DRIVER_FILE.matcher(f.getName()).replaceAll(""));
         File stamp = new File(dir, ".source");  // (the package's size:date, then the library chosen in it)
         String id = f.length() + ":" + f.lastModified();

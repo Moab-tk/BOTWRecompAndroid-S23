@@ -1417,7 +1417,292 @@ static void version_rows(bool busy, bool focus) {
 static SDL_Window *g_launcher_win;
 static bool g_files_deleted;  // set here: the start screen goes back to setting the game files up
 static bool g_open_files;     // Settings > Prelaunch: the Game Files page (versions, setup) instead
+#ifdef __ANDROID__
+// (S23) Settings > Files as option rows: what's used most first, the long explanations in the side pane, and the kept
+// driver packages as a list to pick from (<external files>/drivers; active.txt names the chosen one, "-" the system's:
+// BOTWRecompAndroidActivity.customDriver reads it at the next start).
+static std::string drivers_dir() {
+    const char *d = getenv("LARECOMP_DRIVERS_DIR");
+    return d ? d : "";
+}
+static std::string driver_active() {  // the chosen file, "-" the system's, "" none chosen yet (the first one is used)
+    std::string a;
+    if (FILE *f = fopen((drivers_dir() + "/active.txt").c_str(), "rb")) {
+        char b[256];
+        size_t n = fread(b, 1, sizeof b - 1, f);
+        fclose(f);
+        a.assign(b, n);
+        while (!a.empty() && (a.back() == '\n' || a.back() == '\r' || a.back() == ' ')) a.pop_back();
+    }
+    return a;
+}
+static void driver_set_active(const std::string &name) {
+    if (FILE *f = fopen((drivers_dir() + "/active.txt").c_str(), "wb")) {
+        fputs(name.c_str(), f);
+        fclose(f);
+    }
+}
+static bool driver_file(const std::string &n) {
+    size_t dot = n.rfind('.');
+    if (dot == std::string::npos) return false;
+    std::string e = n.substr(dot + 1);
+    for (char &c : e) c = (char)tolower((unsigned char)c);
+    return e == "zip" || e == "adpkg" || e == "so";
+}
+static std::vector<std::string> driver_files() {
+    static std::vector<std::string> list;
+    static int age;
+    if (age-- <= 0) {  // (read again now and then: one just added shows up)
+        age = 30;
+        list.clear();
+        if (DIR *d = opendir(drivers_dir().c_str())) {
+            while (dirent *e = readdir(d))
+                if (driver_file(e->d_name)) list.push_back(e->d_name);
+            closedir(d);
+        }
+        std::sort(list.begin(), list.end());
+    }
+    return list;
+}
+static std::string driver_shown(const std::string &file) {  // (the package's name: as files/drivers/<name>/ has it)
+    size_t dot = file.rfind('.');
+    return dot == std::string::npos ? file : file.substr(0, dot);
+}
+static void note_row(const std::string &msg, bool failed = false) {  // a line under the rows
+    if (msg.empty()) return;
+    ImGui::Dummy(ImVec2(0, 6));
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextColored(failed ? ImVec4(1, 0.55f, 0.42f, 1) : ImVec4(0.45f, 0.95f, 0.75f, 1), "%s", msg.c_str());
+    ImGui::PopTextWrapPos();
+    ImGui::Dummy(ImVec2(0, 6));
+}
+static void prelaunch_rows(float sc) {
+    opt_begin("##files", sc);
+    bool changed = false;
+
+    opt_section("Game");
+    {
+        std::string version = version_name(rt_game_version());
+        if (opt_action("Versions and setup", version.c_str(),
+                       "Versions 1.0.0, 1.6.0, 1.8.2 and 1.9.0 can be set up side by side, each with its own saves."))
+            g_open_files = true;
+    }
+
+    opt_section("Vulkan driver");
+    {
+        const char *d = getenv("LARECOMP_VK_DRIVER");
+        const char *rejected = vk_driver_rejected();  // (chosen, but the system's ran: android_driver.c)
+        std::string in_use;  // (its name: the folder of files/drivers/<name>/<library>; "": the system's)
+        if (d && *d && !*rejected) {
+            in_use = d;
+            size_t slash = in_use.rfind('/');
+            if (slash != std::string::npos) in_use.erase(slash);
+            slash = in_use.rfind('/');
+            if (slash != std::string::npos) in_use.erase(0, slash + 1);
+        }
+        std::vector<std::string> files = driver_files();
+        std::string active = driver_active();
+        if (active.empty() && !files.empty()) active = files[0];
+        if (active != "-" && !active.empty() && std::find(files.begin(), files.end(), active) == files.end()) active = "-";
+        const char *about = "The game runs on the system's driver, lighting included. On Adreno GPUs, Mesa's Turnip driver runs "
+                            "it faster: choose a Turnip driver package (.zip, as for adrenotools).";
+        auto pick = [](const std::string &name) {
+            driver_set_active(name);
+            pthread_mutex_lock(&g_lock);
+            g_driver_msg.clear(), g_driver_restart = false;  // (the last pick's message)
+            pthread_mutex_unlock(&g_lock);
+        };
+        for (const std::string &f : files) {
+            std::string desc = driver_shown(f) == in_use ? std::string(tr("In use now.")) + "\n\n" + vk_driver_desc() : std::string(tr(about));
+            if (opt_radio(driver_shown(f).c_str(), f == active, desc.c_str())) pick(f);
+        }
+        if (opt_radio("Use the system driver", active == "-" || active.empty(), about)) pick("-");
+        if (opt_button("Add driver", "A Turnip package (.zip) from your files. It joins this list and is chosen; the others are kept."))
+            android_call("pickDriver");
+        static bool confirm;
+        if (active != "-" && !active.empty() && files.size() > 0) {
+            if (!confirm) {
+                if (opt_action("Remove this driver", driver_shown(active).c_str(), "Deletes the chosen package from the list.")) confirm = true;
+            } else {
+                if (opt_action("Yes, remove it", driver_shown(active).c_str(), "Deletes the chosen package from the list.")) {
+                    remove((drivers_dir() + "/" + active).c_str());
+                    driver_set_active("-");
+                    confirm = false;
+                    driver_files();
+                }
+                if (opt_action("Cancel", "", "Keeps it.")) confirm = false;
+            }
+        }
+        std::string wanted = active == "-" ? "" : driver_shown(active);
+        pthread_mutex_lock(&g_lock);
+        std::string msg = g_driver_msg;
+        bool restart = g_driver_restart;
+        pthread_mutex_unlock(&g_lock);
+        if (restart || (wanted != in_use && !*rejected)) {
+            if (opt_button("Restart now", "The driver is loaded when the app starts.")) {
+                settings_save();
+                android_call("restartApp");
+            }
+        }
+        if (*rejected) {
+            char m[300];
+            snprintf(m, sizeof m, tr("%s couldn't be used on this GPU: choose a driver made for it."), rejected);
+            note_row(m, true);
+        }
+        note_row(msg);
+    }
+
+    opt_section("Frame generation (Lossless Scaling)");
+    {   // (the file is the player's own and stays on the phone: BOTWRecompAndroidActivity.importLossless)
+        bool have = fg_dll_present();
+        const char *about = "Generated frames between the real ones (the switch is in the Video tab). It needs the Lossless.dll of "
+                            "your own copy of Lossless Scaling, from its Steam folder. The file stays on this phone and is never "
+                            "part of the app.";
+        if (opt_action("Choose Lossless.dll", tr(have ? "Imported" : "Not imported"), about)) android_call("pickLossless");
+        if (have && opt_button("Remove Lossless.dll", about)) android_call("removeLossless");
+        pthread_mutex_lock(&g_lock);
+        std::string msg = g_fg_msg;
+        bool restart = g_fg_restart;
+        pthread_mutex_unlock(&g_lock);
+        if (restart && opt_button("Restart now##fg", "The file is read when the app starts.")) android_call("restartApp");
+        note_row(msg);
+        if (*fg_status()) {
+            char m[320];
+            snprintf(m, sizeof m, tr("Frame generation stopped: %s"), fg_status());
+            note_row(m, true);
+        }
+    }
+
+    opt_section("Saves");
+    {
+        pthread_mutex_lock(&g_lock);
+        std::string msg = g_save_msg;
+        bool failed = g_save_failed, sbusy = g_save_busy;
+        pthread_mutex_unlock(&g_lock);
+        const char *about = "The saves are in the app's own folder, out of file managers' reach. Export saves this version's as one "
+                            ".zip where you choose (to keep, edit, send or move them). Import replaces them with the saves in a "
+                            ".zip - one exported here, or any holding 0, 1, 2... and option.sav; Import from folder takes an "
+                            "emulator's save folder. The ones before are kept beside them. A save from a newer version of the game "
+                            "may not load in an older one.";
+        auto save = [&](const char *label, const char *method) {
+            if (sbusy) opt_disable_next();
+            if (opt_button(label, about)) {
+                pthread_mutex_lock(&g_lock);
+                g_save_busy = true, g_save_msg.clear();
+                pthread_mutex_unlock(&g_lock);
+                android_call(method);  // (then nativeSaveDone)
+            }
+        };
+        save("Export saves", "pickSaveExport");
+        save("Import saves", "pickSaveImport");
+        save("Import from folder", "pickSaveImportFolder");
+        note_row(msg, failed);
+    }
+
+    opt_section("DLC");
+    {
+        pthread_mutex_lock(&g_lock);
+        std::string msg = g_dlc_msg;
+        bool failed = g_dlc_failed, dbusy = g_dlc_busy;
+        pthread_mutex_unlock(&g_lock);
+        bool have = fs_aoc_image() != NULL;
+        const char *about = "The Expansion Pass - The Master Trials and The Champions' Ballad - for game versions 1.6.0, 1.8.2 and 1.9.0. "
+                            "Choose the folder with your own DLC's extracted romfs: the larger pack (01007EF00011F001, 7,094 files, "
+                            "about 1.4 GB) holds both; the other one is only the Ballad's unlock and isn't needed. The DLC isn't "
+                            "included with BOTWRecompAndroid.";
+        if (dbusy || g_busy) opt_disable_next();
+        if (opt_action(have ? "Install again" : "Install DLC", tr(have ? "Installed." : "Not installed."), about)) {
+            pthread_mutex_lock(&g_lock);
+            g_dlc_busy = true, g_dlc_msg.clear();
+            pthread_mutex_unlock(&g_lock);
+            android_call("pickDlcFolder");  // (then importDlc -> nativeBuildDlc -> nativeDlcDone)
+        }
+        if (have) {
+            if (dbusy || g_busy) opt_disable_next();
+            if (opt_button("Remove DLC", about)) {
+                remove_tree(dlc_dir());
+                pthread_mutex_lock(&g_lock);
+                g_dlc_msg = tr("DLC removed."), g_dlc_failed = false;
+                pthread_mutex_unlock(&g_lock);
+            }
+        }
+        float f = g_dlc_frac;
+        if (dbusy && f >= 0) {
+            char m[80];
+            snprintf(m, sizeof m, tr("Installing the DLC... %d%%"), (int)(f * 100));
+            note_row(m);
+        }
+        note_row(msg, failed);
+    }
+
+    opt_section("Game font");
+    {
+        import_fonts();
+        bool fs = have_font(FONT_STD, 4), fe = have_font(FONT_EXT, 2);
+        const char *about = "Fonts aren't included. For the original look, dump them from your own Switch and import: "
+                            "nintendo_udsg-r_std_003.bfttf (text) and nintendo_ext_003.bfttf (button icons). "
+                            ".ttf versions with the same names work too.";
+        static const SDL_DialogFileFilter font_f[] = {{"Switch fonts", "bfttf;ttf"}};
+        if (opt_action("Import fonts", tr(fs ? "Nintendo font (imported)" : "substitute (Hiragino Sans)"), about))
+            SDL_ShowOpenFileDialog(picked_fonts, NULL, g_launcher_win, font_f, 1, NULL, true);
+        if ((fs || fe) && opt_button("Use substitute font", about)) remove_fonts();
+        if (!g_font_msg.empty()) note_row(tr(g_font_msg.c_str()));
+    }
+
+    opt_section("Advanced");
+    {   // (runtime/settings.h gpu_heap / inplace_reads / turnip_lrz / log_file: for GPUs where a Turnip path draws wrong)
+        const bool a8 = vk_adreno_8xx(vk_gpu_name());  // (Automatic: on for the Adreno 8xx and the 740)
+        const char *tri_names[] = {a8 ? "Automatic (on for this GPU)" : "Automatic (off for this GPU)", "On", "Off"};
+        auto tri = [&](const char *label, int *v, const char *desc) {  // Automatic / On / Off: -1 / 1 / 0
+            int i = *v < 0 ? 0 : *v ? 1 : 2;
+            if (opt_choice(label, &i, tri_names, 3, 0, desc)) {
+                *v = i == 0 ? -1 : i == 1 ? 1 : 0;
+                changed = true;
+            }
+        };
+        tri("Game memory on the GPU (Turnip)", &g_settings.gpu_heap,
+            "On: the game's memory is mapped straight into the GPU's, the fastest way. Off: what each frame uses is copied instead - it "
+            "draws right where the fast way doesn't, but this game runs at about half the frame rate (15 fps instead of 35 on an "
+            "Adreno 830). Automatic: on for Adreno 8xx GPUs, off for the others - on another Adreno, try On first. Applies when the "
+            "game starts.");
+        tri("Draw-target reads in place (Turnip)", &g_settings.inplace_reads,
+            "On: decals and effects read the image they draw on as it is, the fastest way. Off: a copy of it each time, slower (fewer "
+            "fps) but by the Vulkan rules. Automatic: on for Adreno 8xx GPUs, off for the others. Applies when the game starts.");
+        tri("Turnip low-resolution Z (LRZ)", &g_settings.turnip_lrz,
+            "Turnip's early depth test, a little faster. Off can fix missing or broken drawing on some Adreno GPUs. Automatic: on for "
+            "Adreno 8xx GPUs, off for the others. Applies when BOTWRecompAndroid restarts.");
+        bool lrz_now = g_settings.turnip_lrz < 0 ? a8 : g_settings.turnip_lrz != 0;
+        if (lrz_now != vk_lrz_at_start() && opt_button("Restart now##lrz", "Restart BOTWRecompAndroid to apply it.")) {
+            settings_save();
+            android_call("restartApp");
+        }
+        if (!g_log_folder_read) {
+            g_log_folder_read = true;
+            log_folder_read();
+        }
+        pthread_mutex_lock(&g_lock);
+        std::string folder = g_log_folder;
+        pthread_mutex_unlock(&g_lock);
+        const char *log_about = "Writes what the app reports (GPU, driver, errors) to botwrecomp-log.txt in a folder you choose (create "
+                                "one, e.g. Download/BOTWRecomp), to open on the phone and send with a bug report. Turn it on and play "
+                                "until the problem shows; after a crash, the run before is kept as botwrecomp-log-previous.txt.";
+        if (opt_toggle("Save a log file", &g_settings.log_file, false, log_about)) {
+            changed = true;
+            if (g_settings.log_file && folder.empty()) android_call("pickLogFolder");  // (then nativeLogFolderPicked)
+            else android_log_file(g_settings.log_file);
+        }
+        if (opt_action(folder.empty() ? "Choose folder" : "Change folder", folder.c_str(), log_about)) android_call("pickLogFolder");
+    }
+    if (changed) settings_save();
+    opt_end();
+}
+#endif
+
 static void prelaunch_tab(float sc) {
+#ifdef __ANDROID__
+    prelaunch_rows(sc);
+    return;
+#endif
     const ImVec4 gold(0.93f, 0.76f, 0.33f, 1);
     auto heading = [&](const char *t) {
 #ifdef __ANDROID__  // (the Sheikah look of the menu's pages)

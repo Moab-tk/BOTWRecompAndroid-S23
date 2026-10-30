@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <string>
 
 #include "imgui.h"
@@ -194,12 +195,14 @@ void ui_sheikah_heading(const char *title, float s) {
 // One row: draws it, handles A / click / tap and left / right while selected. Returns 2 (A / click), -1 / +1 (left /
 // right, or a tap on that side's arrow) or 0. arrows: a value that steps (◀ value ▶ on the selected row). bar: a
 // slider's position, 0..1 (-1: none) - dragging along the selected row's value sets it (g_drag).
-// toggle: a switch on the right instead of a value (0 off, 1 on, -1: not a toggle).
+// toggle: a switch on the right instead of a value (0 off, 1 on, -1: not a toggle, -2: nor a chevron).
 static int row(const char *label, const std::string &value, bool changed, const char *desc, bool upper = false,
                bool arrows = false, float bar = -1, int toggle = -1) {
     (void)upper;  // (the Sheikah look writes labels as given; option pages pass them in sentence case)
     ImGui::PushID(label);  // (the English label: the row's id in any language)
-    const char *name = tr(label);  // (what is shown: ui/i18n.mm)
+    // (what is shown: ui/i18n.mm; "Text##id": two rows with the same text)
+    const std::string plain(label, strstr(label, "##") ? (size_t)(strstr(label, "##") - label) : strlen(label));
+    const char *name = tr(plain.c_str());
     const std::string shown = value.empty() ? value : std::string(tr(value.c_str()));
     if (desc) desc = tr(desc);
     if (g_indent) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + g_indent * 28 * g_scale);  // (an option of the row above)
@@ -234,8 +237,8 @@ static int row(const char *label, const std::string &value, bool changed, const 
         // (S23: one tap. The arrows always show, so a finger on the value's left or right half steps it at once, and on a
         // switch flips it; a finger on the label only picks the row, to read its description)
         if (touch) {
-            if (value.empty() && toggle < 0) step = 2;
-            else if (on_value) step = arrows ? (mx < (vx0 + vx1) * 0.5f ? -1 : 1) : 2;
+            if (!arrows && toggle < 0) step = 2;  // (an action: anywhere on it)
+            else if (on_value) step = !arrows ? 2 : mx < (vx0 + vx1) * 0.5f ? -1 : 1;
         } else {
             step = 2;
             if (arrows) {
@@ -311,7 +314,7 @@ static int row(const char *label, const std::string &value, bool changed, const 
             dl->AddCircleFilled(ImVec2(bx0 + (bx1 - bx0) * f, by), 5 * s, cyan, 12);
         }
     }
-    if (!arrows && toggle < 0) chevron(dl, p.x + w - pad * 0.9f, cy, fs * 0.22f, off ? IM_COL32(65, 222, 246, 70) : cyan);
+    if (!arrows && toggle == -1) chevron(dl, p.x + w - pad * 0.9f, cy, fs * 0.22f, off ? IM_COL32(65, 222, 246, 70) : cyan);
     if (!g_two_panes && sel && desc && *desc) {  // (one pane: the description under the selected row)
         ImGui::PushTextWrapPos(0);
         ImGui::TextColored(ImVec4(0.86f, 0.84f, 0.76f, 0.9f), "%s", desc);
@@ -385,7 +388,7 @@ bool opt_button(const char *label, const char *desc) { return row(label, "", fal
 
 bool opt_radio(const char *label, bool selected, const char *desc) {
     bool off = g_next_disabled;
-    bool chosen = row(label, "", false, desc) == 2;
+    bool chosen = row(label, "", false, desc, false, false, -1, -2) == 2;  // (-2: no chevron, the ring is its mark)
     ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
     float r = ImGui::GetFontSize() * 0.32f, cx = b.x - 40 * g_scale - r, cy = (a.y + b.y) * 0.5f;
     ImDrawList *dl = ImGui::GetWindowDrawList();
