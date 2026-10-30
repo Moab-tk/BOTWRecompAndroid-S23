@@ -1200,6 +1200,9 @@ static void run_job(void (*fn)(void *), void *arg) {
 #endif
         const char *workers = getenv("LARECOMP_SHADER_WORKERS");
         if (workers) n = atoi(workers);
+#ifdef __ANDROID__
+        else if (g_settings.shader_workers > 0) n = g_settings.shader_workers;  // (S23: Settings > Files > Tests)
+#endif
         if (n < 1) n = 1;
         if (n > 16) n = 16;
         for (int i = 0; i < n; i++) { pthread_t t; pthread_create(&t, NULL, worker, NULL); }

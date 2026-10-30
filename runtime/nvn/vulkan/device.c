@@ -918,6 +918,9 @@ static VkPresentModeKHR present_mode(void) {
     // a throttled / captured / busy compositor slowed the whole game (4-21 fps with the GPU mostly idle; mailbox:
     // 60). No tearing. LARECOMP_VK_PRESENT=fifo|immediate|mailbox to choose.
     const char *e = getenv("LARECOMP_VK_PRESENT");
+#ifdef __ANDROID__
+    if (!e && g_settings.present_fifo) e = "fifo";  // (S23: Settings > Files > Tests)
+#endif
     VkPresentModeKHR want = !e || !strcmp(e, "mailbox") ? VK_PRESENT_MODE_MAILBOX_KHR
                           : !strcmp(e, "immediate") ? VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR;
     uint32_t n = 0;
@@ -1886,6 +1889,11 @@ bool vk_adreno_8xx(const char *name) {
 // A Turnip path's setting (-1 Automatic, 1 on, 0 off) for this GPU
 bool vk_turnip_path_on(int setting) { return setting < 0 ? vk_adreno_8xx(g_vk.props.deviceName) : setting != 0; }
 static bool g_lrz_at_start = true;
+static bool g_fifo_at_start;
+static int g_turnip_mode_at_start;
+bool vk_tests_changed(void) {  // (S23: Settings > Files > Tests read when the app starts)
+    return g_settings.present_fifo != g_fifo_at_start || g_settings.turnip_mode != g_turnip_mode_at_start;
+}
 bool vk_lrz_at_start(void) { return g_lrz_at_start; }  // (the start screen: a change needs a restart)
 const char *vk_gpu_name(void) { return g_vk.props.deviceName; }
 #endif
@@ -1902,6 +1910,8 @@ void ui_window_init(void) {
     {   // Driver compatibility (the start screen's Settings > Prelaunch): applied before the driver loads
         extern void android_log_file(bool on);
         android_log_file(g_settings.log_file);
+        vk_gpu_turbo_start();
+        g_fifo_at_start = g_settings.present_fifo, g_turnip_mode_at_start = g_settings.turnip_mode;
         // Turnip reads TU_DEBUG once, when it starts: low-resolution Z off (it can drop draws on some Adreno GPUs).
         // Automatic needs the GPU before Vulkan names it: the kernel's (the GPU driver reads it from the app too), else
         // the last start's; unknown: on.
@@ -1918,7 +1928,13 @@ void ui_window_init(void) {
             lrz = !model[0] || vk_adreno_8xx(model);
         }
         g_lrz_at_start = lrz != 0;
-        if (!lrz && !getenv("TU_DEBUG")) setenv("TU_DEBUG", "nolrz", 1);
+        if (!getenv("TU_DEBUG")) {
+            static const char *const modes[] = {"", "gmem", "sysmem", "noubwc"};  // (S23: Settings > Files > Tests)
+            const char *mode = modes[g_settings.turnip_mode];
+            char debug[32];
+            snprintf(debug, sizeof debug, "%s%s%s", lrz ? "" : "nolrz", !lrz && *mode ? "," : "", mode);
+            if (*debug) setenv("TU_DEBUG", debug, 1);
+        }
         LOG("[vk] Turnip LRZ %s (%s%s)%s%s\n", lrz ? "on" : "off", g_settings.turnip_lrz < 0 ? "automatic: " : "settings",
             g_settings.turnip_lrz < 0 ? (model[0] ? model : "GPU unknown") : "", getenv("TU_DEBUG") ? ", TU_DEBUG=" : "",
             getenv("TU_DEBUG") ? getenv("TU_DEBUG") : "");

@@ -48,6 +48,12 @@ typedef struct {
     int framegen;         // (S23) generated frames per real one: 0 off, 1 2x, 2 3x (vulkan/framegen.c; needs a Lossless.dll)
     int framegen_model;   // 0 light, 1 quality
     int ui_size;          // (S23) the settings pages' text and rows: 0 normal, 1 large, 2 extra large (ui/menu.mm)
+    // (S23) Settings > Files > Tests, all off by default
+    bool gpu_turbo;       // the GPU doesn't rest while the app is in front (vulkan/android_driver.c vk_gpu_turbo)
+    bool present_fifo;    // FIFO instead of MAILBOX (vulkan/device.c present_mode); read when the app starts
+    int shader_workers;   // threads building shaders, 0 automatic (vulkan/exec.c)
+    int force_aniso;      // 0 the game's, 1-5: 1x, 2x, 4x, 8x, 16x (vulkan/textures.c)
+    int turnip_mode;      // TU_DEBUG: 0 none, 1 gmem, 2 sysmem, 3 noubwc; read when the app starts (vulkan/device.c)
     // Driver compatibility (the start screen's Settings > Prelaunch, ui/launcher.mm; from LASRecompAndroid), for GPUs
     // where a Turnip path draws wrong: read when the game starts (gpu_heap, inplace_reads) or when the app starts
     // (turnip_lrz, log_file). -1 Automatic: on for the Adreno 8xx GPUs these paths were made on, off elsewhere

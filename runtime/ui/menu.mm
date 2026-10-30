@@ -1061,6 +1061,9 @@ static void tabs_body_sized(float scale, bool in_game, void (*prelaunch)(float))
                      22 * scale, 2.5f * scale);
     ui_sheikah_frame(wdl, ImVec2(wp.x + 11 * scale, wp.y + 11 * scale), ImVec2(wp.x + ws.x - 11 * scale, wp.y + ws.y - 11 * scale),
                      IM_COL32(186, 157, 97, 60), 17 * scale, 1);
+#ifdef __ANDROID__
+    ImGui::Dummy(ImVec2(0, 8 * scale));  // (S23: no title, the height goes to the options: the tabs say where you are)
+#else
     {   // the eye, the title between two lines with diamonds
         float cx = wp.x + ws.x * 0.5f, ey = wp.y + 26 * scale;
         ui_sheikah_eye(wdl, ImVec2(cx, ey), 15 * scale, cyan, 2 * scale);
@@ -1087,6 +1090,7 @@ static void tabs_body_sized(float scale, bool in_game, void (*prelaunch)(float))
         }
         ImGui::Dummy(ImVec2(0, ty + tsz + 8 * scale - ImGui::GetCursorScreenPos().y));
     }
+#endif
     {   // the tabs: centred when they fit, else scrolled sideways
         float th = 64 * scale, fs = ImGui::GetFontSize(), tab_w[16], total = 0;
         char ups[16][48];

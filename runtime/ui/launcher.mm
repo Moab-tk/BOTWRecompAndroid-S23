@@ -530,6 +530,8 @@ static void android_call_int(const char *method, int v) {  // (one int argument)
 extern "C" void android_log_file(bool on);
 extern "C" bool vk_adreno_8xx(const char *name);  // (Driver compatibility's Automatic: runtime/nvn/vulkan/device.c)
 extern "C" bool vk_lrz_at_start(void);
+extern "C" bool vk_tests_changed(void);
+extern "C" void vk_gpu_turbo(bool front);
 extern "C" const char *vk_gpu_name(void);
 extern "C" const char *vk_driver_rejected(void);  // (runtime/nvn/vulkan/android_driver.c)
 extern "C" const char *vk_driver_desc(void);      // (its own name and version: runtime/nvn/vulkan/device.c)
@@ -1528,7 +1530,6 @@ static void prelaunch_rows(float sc) {
                     remove((drivers_dir() + "/" + active).c_str());
                     driver_set_active("-");
                     confirm = false;
-                    driver_files();
                 }
                 if (opt_action("Cancel", "", "Keeps it.")) confirm = false;
             }
@@ -1692,6 +1693,44 @@ static void prelaunch_rows(float sc) {
             else android_log_file(g_settings.log_file);
         }
         if (opt_action(folder.empty() ? "Choose folder" : "Change folder", folder.c_str(), log_about)) android_call("pickLogFolder");
+    }
+
+    opt_section("Tests (optional)");
+    {   // (S23) from the look at Eden's options; all off by default, to compare one at a time
+        if (opt_toggle("Keep the GPU awake", &g_settings.gpu_turbo, false,
+                       "The GPU doesn't rest between frames, as Eden's force max clock: frame times may get steadier, but the "
+                       "phone gets hotter and the battery drains faster. It only stays on while the app is in front. On "
+                       "at once.")) {
+            vk_gpu_turbo(true);
+            changed = true;
+        }
+        int fifo = g_settings.present_fifo;
+        const char *present[] = {"Mailbox (default)", "FIFO"};
+        if (opt_choice("Presentation mode", &fifo, present, 2, 0,
+                       "How finished frames reach the screen. Mailbox: a newer frame replaces one still waiting. FIFO: every "
+                       "frame is shown, in order - it may look smoother, but if the screen falls behind the game waits for it. "
+                       "Frame generation always uses FIFO. Applies when BOTWRecompAndroid restarts.")) {
+            g_settings.present_fifo = fifo != 0;
+            changed = true;
+        }
+        changed |= opt_int("Shader build threads", &g_settings.shader_workers, 0, 6, 1, 0, "%d",
+                           "CPU threads building shaders. Automatic: 4 on this phone. Fewer leave more CPU for the game, but "
+                           "effects take longer to appear; more get them ready sooner, and can take CPU from the game. Applies "
+                           "when the game starts.", "Automatic");
+        const char *aniso[] = {"Game's own", "Off", "2x", "4x", "8x", "16x"};
+        changed |= opt_choice("Anisotropic filtering", &g_settings.force_aniso, aniso, 6, 0,
+                              "Sharpness of textures seen at an angle, as the ground far away. Game's own: what the game asks for. "
+                              "Off and low values save some GPU time; high values look sharper and cost more. Applies when the "
+                              "game starts.");
+        const char *modes[] = {"Automatic", "Always tiled (gmem)", "Always direct (sysmem)", "No compression (noubwc)"};
+        changed |= opt_choice("Turnip drawing mode", &g_settings.turnip_mode, modes, 4, 0,
+                              "Only for the Turnip driver. Automatic: it picks for each pass, the best choice in general. The two "
+                              "fixed modes are there to compare frame rates. No compression is only to look for drawing errors, "
+                              "and it's slower. Applies when BOTWRecompAndroid restarts.");
+        if (vk_tests_changed() && opt_button("Restart now##tests", "Restart BOTWRecompAndroid to apply it.")) {
+            settings_save();
+            android_call("restartApp");
+        }
     }
     if (changed) settings_save();
     opt_end();

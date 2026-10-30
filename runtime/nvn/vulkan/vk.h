@@ -26,6 +26,9 @@
 void vk_device_fault_report(void);
 #ifdef __ANDROID__
 void vk_android_load(void);  // android_driver.c: the Vulkan driver (adrenotools / system) into volk
+void vk_gpu_turbo(bool front);
+void vk_gpu_turbo_off_now(void);
+void vk_gpu_turbo_start(void);
 const char *vk_driver_rejected(void);  // (the chosen driver package the system's stood in for; "" none)
 void vk_wait_ready(void);    // device.c: until the device exists (the window's thread makes it)
 #endif

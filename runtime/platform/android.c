@@ -472,6 +472,10 @@ static void crash_handler(int sig, siginfo_t *si, void *ctx) {
                 si->si_code == SEGV_ACCERR ? "no access" : si->si_code == SEGV_MAPERR ? "not mapped" : "other", g_fault_wnr,
                 st, (unsigned long long)odd);
     }
+    {
+        extern void vk_gpu_turbo_off_now(void);
+        vk_gpu_turbo_off_now();  // (the kernel keeps it after the app: android_driver.c)
+    }
     {   // (S23) first, before anything else can go wrong: <data root>/botwrecomp-crash.txt (crash_file.h)
         static atomic_int written;
         if (!atomic_exchange(&written, 1)) {
@@ -550,7 +554,16 @@ static int rm_entry(const char *path, const struct stat *sb, int flag, struct FT
 }
 bool plat_remove_tree(const char *dir) { return nftw(dir, rm_entry, 16, FTW_DEPTH | FTW_PHYS) == 0; }
 
-void plat_terminate(void) { _exit(0); }
+void plat_terminate(void) {
+    extern void vk_gpu_turbo_off_now(void);
+    vk_gpu_turbo_off_now();
+    _exit(0);
+}
+
+JNIEXPORT void JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidActivity_nativeGpuTurbo(JNIEnv *env, jclass cls, jboolean front) {
+    extern void vk_gpu_turbo(bool front);
+    vk_gpu_turbo(front);
+}
 
 // ---- device state for the performance overlay (runtime/ui/perf_overlay.mm)
 #include <dirent.h>

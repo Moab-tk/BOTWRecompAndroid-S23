@@ -76,6 +76,7 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
     private native String nativeBuildRomfs(String[] paths, long[] sizes);
     private static native boolean nativeCheckRomfs(int version, String[] paths, String versionTxt);
     private static native void nativeDriverPicked(String name);
+    private static native void nativeGpuTurbo(boolean front);
     private static native void nativeLosslessPicked(int result);
     private static native void nativeModImportDone(String message);
     private static native void nativeLogFolderPicked(String name);
@@ -165,15 +166,25 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        gpuTurbo(true);
         stats.post(report);
         if (watchMap != null) watchMap.resume();
     }
 
     @Override
     protected void onPause() {
+        gpuTurbo(false);
         stats.removeCallbacks(report);
         if (watchMap != null) watchMap.pause();
         super.onPause();
+    }
+
+    // (S23) Settings > Files > Tests: only while the app is in front (runtime/nvn/vulkan/android_driver.c)
+    private static void gpuTurbo(boolean front) {
+        try {
+            nativeGpuTurbo(front);
+        } catch (UnsatisfiedLinkError notLoaded) {
+        }
     }
 
     // Battery temperature, charge and power draw, and Android's thermal state (runtime/platform/android.c).
