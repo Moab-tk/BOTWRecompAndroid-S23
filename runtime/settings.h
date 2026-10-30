@@ -47,6 +47,7 @@ typedef struct {
     bool sync_lag;        // Android: the game's next frame overlaps the GPU's last (nvn/objects.c nvnSyncWait); on by default
     int framegen;         // (S23) generated frames per real one: 0 off, 1 2x, 2 3x (vulkan/framegen.c; needs a Lossless.dll)
     int framegen_model;   // 0 light, 1 quality
+    int ui_size;          // (S23) the settings pages' text and rows: 0 normal, 1 large, 2 extra large (ui/menu.mm)
     // Driver compatibility (the start screen's Settings > Prelaunch, ui/launcher.mm; from LASRecompAndroid), for GPUs
     // where a Turnip path draws wrong: read when the game starts (gpu_heap, inplace_reads) or when the app starts
     // (turnip_lrz, log_file). -1 Automatic: on for the Adreno 8xx GPUs these paths were made on, off elsewhere

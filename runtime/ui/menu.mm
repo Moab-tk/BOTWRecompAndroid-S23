@@ -328,7 +328,7 @@ static void style_init(void) {
     c[ImGuiCol_ChildBg] = ImVec4(0.09f, 0.13f, 0.11f, 0.85f);
     c[ImGuiCol_PopupBg] = ImVec4(0.07f, 0.10f, 0.09f, 0.98f);
     c[ImGuiCol_Text] = ImVec4(0.96f, 0.94f, 0.88f, 1);
-    c[ImGuiCol_TextDisabled] = ImVec4(0.62f, 0.64f, 0.58f, 1);
+    c[ImGuiCol_TextDisabled] = ImVec4(0.76f, 0.77f, 0.72f, 1);  // (S23: the small print, easier to read)
     c[ImGuiCol_FrameBg] = ImVec4(0.13f, 0.19f, 0.16f, 1);
     c[ImGuiCol_FrameBgHovered] = green;
     c[ImGuiCol_FrameBgActive] = ImVec4(0.19f, 0.45f, 0.31f, 1);
@@ -530,6 +530,10 @@ static void tab_display(void) {
                    "Light: less work for the GPU. Quality: better motion, more heat.");
     }
 #endif
+    const char *ui_sizes[] = {"Normal", "Large", "Extra large"};
+    if (opt_choice("Interface size", &g_settings.ui_size, ui_sizes, 3, 1,
+                   "The size of the text and buttons on these pages. Long names slide by themselves when they don't fit."))
+        settings_save();
     const char *aspects[] = {"Unlocked", "Original 16:9"};
     opt_choice("Aspect ratio", &g_settings.aspect, aspects, 2, ASPECT_UNLOCKED,
                "Unlocked: the view fills the screen, so wider screens show more of Hyrule, and the HUD moves out to its "
@@ -999,7 +1003,22 @@ static bool g_touch_settings_back;
 extern "C" bool menu_settings_back_requested() { bool back = g_touch_settings_back; g_touch_settings_back = false; return back; }
 #endif
 
+static void tabs_body_sized(float scale, bool in_game, void (*prelaunch)(float));
+// (S23) Settings > Video > Interface size: every page's text, and its rows and buttons with it (they go by the font)
 static void tabs_body(float scale, bool in_game, void (*prelaunch)(float)) {
+    static const float sizes[] = {1.0f, 1.3f, 1.6f};
+    int u = g_settings.ui_size;
+    float k = sizes[u < 0 ? 0 : u > 2 ? 2 : u];
+    ImGuiIO &io = ImGui::GetIO();
+    float base = io.FontGlobalScale;
+    io.FontGlobalScale = base * k;
+    ImGui::PushFont(ImGui::GetFont());  // (the new size takes effect when a font is set)
+    tabs_body_sized(scale * k, in_game, prelaunch);
+    io.FontGlobalScale = base;
+    ImGui::PopFont();
+}
+
+static void tabs_body_sized(float scale, bool in_game, void (*prelaunch)(float)) {
     // (id: the page; -1 = Prelaunch)
     struct Tab { const char *name; int id; bool on; };
     Tab tabs[10];

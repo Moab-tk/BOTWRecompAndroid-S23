@@ -81,6 +81,21 @@ static void chevron(ImDrawList *dl, float x, float cy, float s, ImU32 col) {
     dl->AddLine(ImVec2(x + s * 0.5f, cy), ImVec2(x - s * 0.5f, cy + s), col, fmaxf(1.5f, s * 0.28f));
 }
 
+void ui_marquee_text(ImDrawList *dl, ImVec2 p, float w, unsigned int col, const char *text) {
+    float tw = ImGui::CalcTextSize(text).x, fs = ImGui::GetFontSize();
+    if (tw <= w || w <= 0) {
+        dl->AddText(p, col, text);
+        return;
+    }
+    const float pause = 1.4f, speed = fs * 1.5f;  // (a moment on each end, to start reading and to finish)
+    float over = tw - w, run = over / speed, cycle = 2 * (pause + run);
+    float t = fmodf((float)ImGui::GetTime(), cycle);
+    float x = t < pause ? 0 : t < pause + run ? (t - pause) * speed : t < 2 * pause + run ? over : over - (t - 2 * pause - run) * speed;
+    dl->PushClipRect(ImVec2(p.x, p.y - fs * 0.2f), ImVec2(p.x + w, p.y + fs * 1.4f), true);
+    dl->AddText(ImVec2(p.x - x, p.y), col, text);
+    dl->PopClipRect();
+}
+
 void ui_touch_scroll() {
 #ifdef __ANDROID__
     ImGuiIO &io = ImGui::GetIO();
@@ -179,8 +194,9 @@ void ui_sheikah_heading(const char *title, float s) {
 // One row: draws it, handles A / click / tap and left / right while selected. Returns 2 (A / click), -1 / +1 (left /
 // right, or a tap on that side's arrow) or 0. arrows: a value that steps (◀ value ▶ on the selected row). bar: a
 // slider's position, 0..1 (-1: none) - dragging along the selected row's value sets it (g_drag).
+// toggle: a switch on the right instead of a value (0 off, 1 on, -1: not a toggle).
 static int row(const char *label, const std::string &value, bool changed, const char *desc, bool upper = false,
-               bool arrows = false, float bar = -1) {
+               bool arrows = false, float bar = -1, int toggle = -1) {
     (void)upper;  // (the Sheikah look writes labels as given; option pages pass them in sentence case)
     ImGui::PushID(label);  // (the English label: the row's id in any language)
     const char *name = tr(label);  // (what is shown: ui/i18n.mm)
@@ -189,7 +205,7 @@ static int row(const char *label, const std::string &value, bool changed, const 
     if (g_indent) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + g_indent * 28 * g_scale);  // (an option of the row above)
     ImVec2 p = ImGui::GetCursorScreenPos();
     float s = g_scale, fs = ImGui::GetFontSize();
-    float w = ImGui::GetContentRegionAvail().x, h = fmaxf(fs * 2.05f, 58 * s);
+    float w = ImGui::GetContentRegionAvail().x, h = fmaxf(fs * 2.2f, 58 * s);
     ImGui::PushStyleColor(ImGuiCol_NavCursor, ImVec4(0, 0, 0, 0));  // (the row's own frame shows the selection)
     bool clicked = ImGui::InvisibleButton("##row", ImVec2(w, h), ImGuiButtonFlags_EnableNav);
     ImGui::PopStyleColor();
@@ -215,11 +231,14 @@ static int row(const char *label, const std::string &value, bool changed, const 
     if (clicked && !off) {
         float mx = io.MousePos.x;
         bool on_value = mx >= vx0;
-        // (a finger on a label just picks the row, and so does the first one on a value that steps: it shows the row's
-        // arrows - stepping on, it went right only, as if the chevron were the only way)
-        if (!touch || was_sel || (on_value && !arrows) || value.empty()) {
+        // (S23: one tap. The arrows always show, so a finger on the value's left or right half steps it at once, and on a
+        // switch flips it; a finger on the label only picks the row, to read its description)
+        if (touch) {
+            if (value.empty() && toggle < 0) step = 2;
+            else if (on_value) step = arrows ? (mx < (vx0 + vx1) * 0.5f ? -1 : 1) : 2;
+        } else {
             step = 2;
-            if (arrows && (was_sel || !touch)) {
+            if (arrows) {
                 if (mx <= lax + aw + pad) step = -1;
                 else if (mx >= rax - pad) step = 1;
             }
@@ -245,7 +264,7 @@ static int row(const char *label, const std::string &value, bool changed, const 
     // a slider: a finger held on the selected row's value and moved sideways sets it where it is along the bar
     float bx0 = lax + aw + pad, bx1 = rax - pad;
     g_row_dragged = false;
-    if (bar >= 0 && !off && ImGui::IsItemActive() && was_sel && io.MouseDown[0] && io.MouseClickedPos[0].x >= vx0 &&
+    if (bar >= 0 && !off && ImGui::IsItemActive() && io.MouseDown[0] && io.MouseClickedPos[0].x >= vx0 &&
         (g_drag_id == id || fabsf(io.MousePos.x - io.MouseClickedPos[0].x) > fs * 0.3f) && bx1 > bx0) {
         g_drag = fminf(1, fmaxf(0, (io.MousePos.x - bx0) / (bx1 - bx0)));
         g_drag_id = id, g_row_dragged = true;
@@ -257,44 +276,42 @@ static int row(const char *label, const std::string &value, bool changed, const 
 
     ImDrawList *dl = ImGui::GetWindowDrawList();
     const ImU32 cyan = IM_COL32(65, 222, 246, 235), gold = IM_COL32(186, 157, 97, off ? 60 : 110);
-    ImVec2 b(p.x + w, p.y + h - 2 * s);
-    if (sel) {
-        dl->AddRectFilled(ImVec2(p.x + 2, p.y + 2 * s), b, IM_COL32(22, 107, 131, off ? 30 : 70), 4 * s);
-        ui_sheikah_frame(dl, ImVec2(p.x + 2, p.y + 2 * s), b, off ? IM_COL32(65, 222, 246, 90) : cyan, 8 * s, 2 * s);
-    } else {
-        dl->AddLine(ImVec2(p.x + 10 * s, p.y + h - 1), ImVec2(p.x + w, p.y + h - 1), gold, 1);
-        ui_sheikah_diamond(dl, ImVec2(p.x + 6 * s, p.y + h - 1), 3 * s, gold, false);
-    }
+    // (S23) each row a card; the selected one lit
+    float rad = 12 * s;
+    ImVec2 a(p.x + 2, p.y + 4 * s), b(p.x + w - 2, p.y + h - 4 * s);
+    dl->AddRectFilled(a, b, sel ? IM_COL32(22, 107, 131, off ? 40 : 95) : IM_COL32(255, 255, 255, off ? 5 : 12), rad);
+    if (sel) dl->AddRect(a, b, off ? IM_COL32(65, 222, 246, 90) : cyan, rad, 0, 2 * s);
+    (void)gold;
     float ty = cy - fs * 0.5f;
     ImU32 label_col = off ? IM_COL32(120, 120, 112, 255) : IM_COL32(240, 235, 218, 255);
-    // the label, cut short with an ellipsis before the value's column (long names, bigger fonts)
-    float room = vx0 - (p.x + pad) - pad * 0.5f;
-    const char *end = name;
-    while (*end) {
-        const char *next = end + 1;
-        while (((unsigned char)*next & 0xc0) == 0x80) ++next;
-        if (ImGui::CalcTextSize(name, next).x > room) break;
-        end = next;
-    }
-    dl->AddText(ImVec2(p.x + pad, ty), label_col, name, end);
-    if (*end) dl->AddText(ImVec2(p.x + pad + ImGui::CalcTextSize(name, end).x, ty), label_col, "...");
-    if (!shown.empty()) {
+    // the label: up to the value's column, sliding when it doesn't fit; with no value, the whole row
+    float room = (shown.empty() ? p.x + w - pad * 1.8f - fs * 0.3f : vx0) - (p.x + pad) - pad * 0.5f;
+    ui_marquee_text(dl, ImVec2(p.x + pad, ty), room, label_col, name);
+    if (toggle >= 0) {  // a switch
+        float th = fs * 0.92f, tw = th * 1.9f, tx1 = p.x + w - pad, tx0 = tx1 - tw, r = th * 0.5f, ky = cy;
+        ImU32 track = off ? IM_COL32(70, 72, 70, 255) : toggle ? IM_COL32(35, 170, 200, 255) : IM_COL32(58, 66, 68, 255);
+        dl->AddRectFilled(ImVec2(tx0, ky - r), ImVec2(tx1, ky + r), track, r);
+        dl->AddCircleFilled(ImVec2(toggle ? tx1 - r : tx0 + r, ky), r * 0.74f, off ? IM_COL32(150, 150, 142, 255) : IM_COL32(245, 243, 234, 255), 24);
+    } else if (!shown.empty()) {
         ImU32 vcol = off ? IM_COL32(120, 120, 112, 255) : changed ? IM_COL32(255, 252, 240, 255) : IM_COL32(214, 210, 196, 255);
+        dl->AddRectFilled(ImVec2(vx0, cy - fs * 0.78f), ImVec2(vx1, cy + fs * 0.78f), IM_COL32(0, 0, 0, 90), fs * 0.5f);  // (its capsule)
         float vw = ImGui::CalcTextSize(shown.c_str()).x;
-        float vy = bar >= 0 && sel ? ty - fs * 0.18f : ty;
-        dl->AddText(ImVec2((vx0 + vx1 - vw) * 0.5f, vy), vcol, shown.c_str());
-        if (sel && arrows && !off) {
+        float vy = bar >= 0 ? ty - fs * 0.18f : ty;
+        float vroom = arrows && !off ? rax - lax - aw - pad : vx1 - vx0 - pad * 0.5f;  // (between the arrows)
+        if (vw <= vroom) dl->AddText(ImVec2((vx0 + vx1 - vw) * 0.5f, vy), vcol, shown.c_str());
+        else ui_marquee_text(dl, ImVec2((vx0 + vx1 - vroom) * 0.5f, vy), vroom, vcol, shown.c_str());
+        if (arrows && !off) {
             arrow(dl, lax, cy, aw, false, cyan);
             arrow(dl, rax, cy, aw, true, cyan);
         }
-        if (bar >= 0 && sel && bx1 > bx0) {  // (a slider: its track under the value, filled to where it is)
+        if (bar >= 0 && bx1 > bx0) {  // (a slider: its track under the value, filled to where it is)
             float by = cy + fs * 0.52f, f = g_drag_id == id ? g_drag : bar;
             dl->AddLine(ImVec2(bx0, by), ImVec2(bx1, by), IM_COL32(186, 157, 97, 120), 2 * s);
             dl->AddLine(ImVec2(bx0, by), ImVec2(bx0 + (bx1 - bx0) * f, by), cyan, 3 * s);
             dl->AddCircleFilled(ImVec2(bx0 + (bx1 - bx0) * f, by), 5 * s, cyan, 12);
         }
     }
-    if (!sel || !arrows) chevron(dl, p.x + w - pad * 0.9f, cy, fs * 0.22f, off ? IM_COL32(65, 222, 246, 70) : cyan);
+    if (!arrows && toggle < 0) chevron(dl, p.x + w - pad * 0.9f, cy, fs * 0.22f, off ? IM_COL32(65, 222, 246, 70) : cyan);
     if (!g_two_panes && sel && desc && *desc) {  // (one pane: the description under the selected row)
         ImGui::PushTextWrapPos(0);
         ImGui::TextColored(ImVec4(0.86f, 0.84f, 0.76f, 0.9f), "%s", desc);
@@ -305,7 +322,7 @@ static int row(const char *label, const std::string &value, bool changed, const 
 }
 
 bool opt_toggle(const char *label, bool *v, bool def, const char *desc) {
-    if (!row(label, *v ? "On" : "Off", *v != def, desc)) return false;  // (any step flips it)
+    if (!row(label, "", *v != def, desc, false, false, -1, *v ? 1 : 0)) return false;  // (any step flips it)
     *v = !*v;
     return true;
 }

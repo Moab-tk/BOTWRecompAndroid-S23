@@ -30,6 +30,7 @@ static const char *settings_file(void) {
 
 Settings g_settings = {
     .aspect = ASPECT_UNLOCKED,
+    .ui_size = 1,
     .fullscreen = false,
     .volume = 1.0f,
     .reverb = true,
@@ -204,6 +205,7 @@ void settings_reset_defaults(void) {
     g_settings.sync_lag = d->sync_lag;
     g_settings.framegen = d->framegen;
     g_settings.framegen_model = d->framegen_model;
+    g_settings.ui_size = d->ui_size;
     g_settings.native_code = d->native_code;
     g_settings.files_in_place = d->files_in_place;
 #endif
@@ -250,6 +252,7 @@ void settings_load(void) {
         else if (!strcmp(key, "sync_lag")) g_settings.sync_lag = atoi(val) != 0;
         else if (!strcmp(key, "framegen")) g_settings.framegen = atoi(val) < 0 ? 0 : atoi(val) > 2 ? 2 : atoi(val);
         else if (!strcmp(key, "framegen_model")) g_settings.framegen_model = atoi(val) != 0;
+        else if (!strcmp(key, "ui_size")) g_settings.ui_size = atoi(val) < 0 ? 0 : atoi(val) > 2 ? 2 : atoi(val);
         else if (!strcmp(key, "native_code")) g_settings.native_code = atoi(val) != 0;
         else if (!strcmp(key, "files_in_place")) g_settings.files_in_place = atoi(val) != 0;
         else if (!strcmp(key, "gpu_heap")) g_settings.gpu_heap = !strcmp(val, "auto") ? -1 : atoi(val) != 0;
@@ -334,7 +337,7 @@ void settings_save(void) {
     fprintf(f, "cutscenes_60 = %d\n", g_settings.event_fps_unlock);
     fprintf(f, "shader_int32 = %d\nsync_lag = %d\nnative_code = %d\nfiles_in_place = %d\n", g_settings.shader_int32,
             g_settings.sync_lag, g_settings.native_code, g_settings.files_in_place);
-    fprintf(f, "framegen = %d\nframegen_model = %d\n", g_settings.framegen, g_settings.framegen_model);
+    fprintf(f, "framegen = %d\nframegen_model = %d\nui_size = %d\n", g_settings.framegen, g_settings.framegen_model, g_settings.ui_size);
     static const char *const tri[] = {"auto", "0", "1"};  // (-1 / 0 / 1)
 #define TRI(v) tri[(v) < 0 ? 0 : (v) ? 2 : 1]
     fprintf(f, "gpu_heap = %s\ninplace_reads = %s\nturnip_lrz = %s\nlog_file = %d\ngpu_model = %s\n", TRI(g_settings.gpu_heap),
