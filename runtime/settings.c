@@ -326,6 +326,25 @@ void settings_load(void) {
     LOG("[settings] loaded %s\n", SETTINGS_FILE);
 }
 
+static bool copy_whole(const char *from, const char *to) {
+    FILE *in = fopen(from, "rb");
+    if (!in) return false;
+    FILE *out = fopen(to, "wb");
+    bool ok = out != NULL;
+    char buf[4096];
+    for (size_t n; ok && (n = fread(buf, 1, sizeof buf, in)) > 0;) ok = fwrite(buf, 1, n, out) == n;
+    fclose(in);
+    if (out) ok &= fclose(out) == 0;
+    return ok;
+}
+
+bool settings_export(const char *path) {
+    settings_save();
+    return copy_whole(SETTINGS_FILE, path);
+}
+
+bool settings_import(const char *path) { return copy_whole(path, SETTINGS_FILE); }
+
 void settings_save(void) {
     FILE *f = fopen(SETTINGS_FILE, "w");
     if (!f) { LOG("[settings] cannot write %s\n", SETTINGS_FILE); return; }

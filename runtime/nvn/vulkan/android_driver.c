@@ -46,9 +46,8 @@ void vk_gpu_turbo(bool front) {
 void vk_gpu_turbo_start(void) {
     atomic_store(&g_turbo, false);
     turbo_ioctl(false);
-    if (!g_settings.gpu_turbo) return;
-    vk_gpu_turbo(true);
     atexit(vk_gpu_turbo_off_now);
+    vk_gpu_turbo(true);
 }
 
 // Does this driver offer a Vulkan GPU at all? (Turnip v26.0.0 R8, built for the A7xx: none on an Adreno 830 - the app

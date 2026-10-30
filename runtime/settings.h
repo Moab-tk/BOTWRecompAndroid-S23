@@ -84,6 +84,10 @@ extern Settings g_settings;
 
 void settings_load(void);
 void settings_save(void);
+// (S23) the start screen's saved settings (ui/launcher.mm): the settings file as it stands now to path / path over it,
+// for the next start to read
+bool settings_export(const char *path);
+bool settings_import(const char *path);
 // The menu's RESTORE DEFAULTS: the Video and Audio options back to the defaults (the language, the controls, the touch
 // layout, mods and the one-time questions stay)
 void settings_reset_defaults(void);

@@ -19,6 +19,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <time.h>
 #include <unistd.h>
 #include <vector>
 #include <algorithm>
@@ -1075,7 +1076,7 @@ static void load_background(GpuDevice dev) {
 
 // ------------------------------------------------------------------ screen
 static ImFont *g_font_title, *g_font_menu, *g_font_small;
-enum Page { MAIN, SETTINGS, SETUP };  // SETTINGS: the in-game menu's tabs (runtime/ui/menu.mm)
+enum Page { MAIN, SETTINGS, SETUP, BLOCKS };  // SETTINGS: the in-game menu's tabs (runtime/ui/menu.mm)
 static int g_refocus = MAIN;  // back on the main page: select the item of the page we came from (controllers)
 
 // A big menu line: gold + a marker when focused / hovered (keyboard, gamepad or mouse), grey when disabled
@@ -1732,8 +1733,181 @@ static void prelaunch_rows(float sc) {
             android_call("restartApp");
         }
     }
+
+    opt_section("Credits");
+    {   // (S23) README.pt-BR.md's credits, and what this version is
+        opt_action("Original project", "mamcjr",
+                   "All of this app's base is BOTWRecompAndroid, by mamcjr (github.com/mamcjr/BOTWRecompAndroid). The credit for "
+                   "the project is entirely theirs.");
+        opt_action("Engine", "peiikai",
+                   "LAS Recomp, by peiikai (MIT license), the recompiler and runtime everything starts from, and "
+                   "LASRecompAndroid, by mamcjr, its Android port.");
+        opt_action("Other projects", "",
+                   "SavageWindRecomp, by Revivedx. LASRecomp-Android-Plus, by Nycolazs. The zeldaret/botw decompilation and "
+                   "open-ead/sead. AMD FSR 1, Snapdragon GSR and SMAA. Bloodframe, by Cid (ducvd89), on top of lsfg-vk. "
+                   "libadrenotools. Mesa's Turnip driver.");
+        opt_action("About this version", "Unofficial",
+                   "An unofficial modification for the Samsung Galaxy S23, made with AI from one person's ideas. It isn't made "
+                   "or supported by the original authors, so please don't take its problems to them. Don't take it too "
+                   "seriously: if it doesn't work for you, just leave it and download the version you like best.");
+    }
     if (changed) settings_save();
     opt_end();
+}
+
+// (S23) The start screen's SAVED SETTINGS: everything in the settings file (every tab's options, the touch controls, the
+// mods) and the driver picked, in blocks to come back to after trying others. Inside the app, beside the versions'
+// folders: <1.0.0's data root>/settings_blocks/<n>.ini, and <n>.txt with its name, date and driver. Loading restarts
+// the app: part of the options is read at the start.
+#define SETTING_BLOCKS 8
+struct SettingBlock {
+    bool used;
+    std::string name, when, driver;
+};
+static SettingBlock g_blocks[SETTING_BLOCKS];
+static int g_block_open = -1, g_block_ask;  // the block open (-1: the list); 1 replace it? 2 load it? 3 delete it?
+static char g_block_name[48];
+static std::string g_block_msg;
+static bool g_block_failed;
+
+static std::string blocks_dir() { return std::string(rt_main_root()) + "/settings_blocks"; }
+static std::string block_file(int i, const char *ext) { return blocks_dir() + "/" + std::to_string(i + 1) + ext; }
+static std::string block_title(int i) {
+    if (!g_blocks[i].name.empty()) return g_blocks[i].name;
+    char t[48];
+    snprintf(t, sizeof t, tr("Block %d"), i + 1);
+    return t;
+}
+static void blocks_read() {
+    for (int i = 0; i < SETTING_BLOCKS; i++) {
+        SettingBlock &b = g_blocks[i];
+        b = SettingBlock();
+        b.used = access(block_file(i, ".ini").c_str(), F_OK) == 0;
+        if (FILE *f = fopen(block_file(i, ".txt").c_str(), "r")) {
+            std::string *const lines[] = {&b.name, &b.when, &b.driver};
+            char l[256];
+            for (std::string *s : lines) {
+                if (!fgets(l, sizeof l, f)) break;
+                l[strcspn(l, "\r\n")] = 0;
+                *s = l;
+            }
+            fclose(f);
+        }
+    }
+}
+static bool block_info_save(int i) {
+    FILE *f = fopen(block_file(i, ".txt").c_str(), "w");
+    if (!f) return false;
+    const SettingBlock &b = g_blocks[i];
+    fprintf(f, "%s\n%s\n%s\n", b.name.c_str(), b.when.c_str(), b.driver.c_str());
+    return fclose(f) == 0;
+}
+static void block_say(const char *msg, bool failed) { g_block_msg = tr(msg), g_block_failed = failed; }
+static void block_save(int i) {
+    mkdir(blocks_dir().c_str(), 0770);
+    SettingBlock &b = g_blocks[i];
+    std::vector<std::string> files = driver_files();
+    std::string driver = driver_active();
+    if (driver.empty()) driver = files.empty() ? "-" : files[0];
+    char when[32];
+    time_t now = time(NULL);
+    strftime(when, sizeof when, "%d/%m/%Y %H:%M", localtime(&now));
+    if (!settings_export(block_file(i, ".ini").c_str())) return block_say("Couldn't save the settings here.", true);
+    b.used = true, b.when = when, b.driver = driver;
+    block_info_save(i);
+    block_say("Settings saved in this block.", false);
+}
+static bool block_driver_kept(const SettingBlock &b) {
+    return b.driver.empty() || b.driver == "-" || access((drivers_dir() + "/" + b.driver).c_str(), F_OK) == 0;
+}
+static void block_load(int i) {
+    const SettingBlock &b = g_blocks[i];
+    if (!settings_import(block_file(i, ".ini").c_str())) return block_say("Couldn't load this block.", true);
+    if (!b.driver.empty() && block_driver_kept(b)) driver_set_active(b.driver);
+    android_call("restartApp");  // (the next start reads them; nothing saves the old ones over them before that)
+}
+static void block_open(int i) {
+    g_block_open = i, g_block_ask = 0, g_block_msg.clear();
+    snprintf(g_block_name, sizeof g_block_name, "%s", g_blocks[i].name.c_str());
+    opt_focus_first(true);
+}
+static void block_close() {
+    g_block_open = -1, g_block_ask = 0, g_block_msg.clear();
+    opt_focus_first(true);
+}
+static void blocks_rows(float sc) {
+    opt_begin("##blocks", sc);
+    if (g_block_open < 0) {
+        opt_section("Saved settings");
+        for (int i = 0; i < SETTING_BLOCKS; i++) {
+            const SettingBlock &b = g_blocks[i];
+            std::string label = block_title(i) + "##" + std::to_string(i), desc;
+            if (b.used) {
+                char d[300];
+                snprintf(d, sizeof d, tr("Saved on %s.\nDriver: %s"), b.when.c_str(),
+                         b.driver.empty() || b.driver == "-" ? tr("the system's") : driver_shown(b.driver).c_str());
+                desc = d;
+            } else {
+                desc = tr("Empty. Open it to keep all the current settings here: every tab's options, the touch controls, the "
+                          "mods and the driver. Your game saves aren't part of this.");
+            }
+            if (opt_action(label.c_str(), b.used ? b.when.c_str() : "Empty", desc.c_str(), false)) block_open(i);
+        }
+    } else {
+        int i = g_block_open;
+        SettingBlock &b = g_blocks[i];
+        opt_section(block_title(i).c_str());
+        std::string load_d = tr("Puts these settings back and restarts the app. What is set now is lost, unless you save it in "
+                                "another block first.");
+        if (!block_driver_kept(b)) {
+            char d[200];
+            snprintf(d, sizeof d, tr("\n\nIts driver, %s, isn't on the list any more: the one chosen now stays."), driver_shown(b.driver).c_str());
+            load_d += d;
+        }
+        static const char *const yes[] = {"Yes, replace it", "Yes, load and restart", "Yes, delete it"};
+        const char *const ask[] = {"This block's settings are replaced by the current ones.", load_d.c_str(),
+                                   "This block is deleted. The current settings stay as they are."};
+        if (!g_block_ask) {
+            if (opt_button("Save the current settings here",
+                           "Keeps everything set now: every tab's options, the touch controls, the mods and the driver. Your "
+                           "game saves aren't part of this.")) {
+                if (b.used) g_block_ask = 1;
+                else block_save(i);
+            }
+            if (b.used) {
+                if (opt_button("Load this block", load_d.c_str())) g_block_ask = 2;
+                if (opt_text("Name", g_block_name, sizeof g_block_name, block_title(i).c_str(), "A name to tell this block from the others.")) {
+                    b.name = g_block_name;
+                    b.name.erase(std::remove_if(b.name.begin(), b.name.end(), [](char c) { return c == '#' || c == '%'; }), b.name.end());
+                    block_info_save(i);
+                }
+                if (opt_button("Delete this block", "Deletes only this block.")) g_block_ask = 3;
+            }
+        } else {
+            if (opt_button(yes[g_block_ask - 1], ask[g_block_ask - 1])) {
+                int what = g_block_ask;
+                g_block_ask = 0;
+                if (what == 1) block_save(i);
+                else if (what == 2) block_load(i);
+                else {
+                    remove(block_file(i, ".ini").c_str());
+                    remove(block_file(i, ".txt").c_str());
+                    blocks_read();
+                    block_close();
+                }
+            }
+            if (opt_button("Cancel", "Keeps everything as it is.")) g_block_ask = 0;
+        }
+        note_row(g_block_msg, g_block_failed);
+    }
+    opt_end();
+}
+// one step back: from the question, from the block, and true when already on the list
+static bool blocks_back() {
+    if (g_block_ask) g_block_ask = 0;
+    else if (g_block_open >= 0) block_close();
+    else return true;
+    return false;
 }
 #endif
 
@@ -2402,6 +2576,18 @@ extern "C" void launcher_run(const char *root) {
                     if (g_refocus == SETUP) ImGui::SetKeyboardFocusHere(), g_refocus = MAIN;
                     if (menu_item("SET UP GAME FILES", !busy)) page = SETUP;
                 }
+#ifdef __ANDROID__
+                else {  // (S23: what SET UP GAME FILES's place holds once the game is set up)
+                    ImGui::SetCursorPosX(x0);
+                    if (g_refocus == BLOCKS) ImGui::SetKeyboardFocusHere(), g_refocus = MAIN;
+                    if (menu_item("SAVED SETTINGS", true)) {
+                        blocks_read();
+                        g_block_open = -1, g_block_ask = 0, g_block_msg.clear();
+                        opt_focus_first(true);
+                        page = BLOCKS;
+                    }
+                }
+#endif
                 ImGui::SetCursorPosX(x0);
                 if (menu_item("QUIT", true)) exit(0);
                 g_menu_gap = 0.35f;
@@ -2467,6 +2653,44 @@ extern "C" void launcher_run(const char *root) {
                     settings_save();
                     page = MAIN, g_refocus = SETTINGS;
                 }
+#ifdef __ANDROID__
+            } else if (page == BLOCKS) {
+                // in a window like Settings, the same text size
+                extern float menu_ui_scale();
+                extern bool menu_back_button(float scale);
+                float sc = ds.y / 1080.0f, w = ds.x * 0.94f, h = ds.y - 2 * 18 * sc;
+                ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetWindowPos(), ImVec2(ImGui::GetWindowPos().x + ds.x,
+                                                          ImGui::GetWindowPos().y + ds.y), IM_COL32(0, 0, 0, 110));
+                ImVec2 wp = ImGui::GetWindowPos();
+                ImGui::SetCursorScreenPos(ImVec2(wp.x + (ds.x - w) * 0.5f, wp.y + (ds.y - h) * 0.5f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.035f, 0.065f, 0.075f, 0.94f));
+                ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6 * sc);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28 * sc, 24 * sc));
+                ImGui::BeginChild("##blockspage", ImVec2(w, h), ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_NavFlattened);
+                ImGui::PopStyleVar(2);
+                ImGui::PopStyleColor();
+                ImGui::PushFont(g_font_small);
+                ImGuiIO &bio = ImGui::GetIO();
+                float font_base = bio.FontGlobalScale, k = menu_ui_scale();
+                bio.FontGlobalScale = font_base * k;
+                ImGui::PushFont(ImGui::GetFont());
+                float bh = fmaxf(1, ImGui::GetContentRegionAvail().y - 84 * sc * k);
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
+                ImGui::BeginChild("##blockrows", ImVec2(0, bh), ImGuiChildFlags_None);
+                ImGui::PopStyleColor();
+                ui_touch_scroll();
+                blocks_rows(sc * k);
+                ImGui::EndChild();
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8 * sc * k);
+                bool back = menu_back_button(sc * k);
+                if (!typing && (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)))
+                    back = true;
+                bio.FontGlobalScale = font_base;
+                ImGui::PopFont();
+                ImGui::PopFont();
+                ImGui::EndChild();
+                if (back && blocks_back()) page = MAIN, g_refocus = BLOCKS;
+#endif
             } else {
                 // SETUP: the game files, in a window like Settings (option rows: runtime/ui/option_rows.h) - choose the
                 // folder with the game files, set up; once set up, delete. Each row's explanation on the right.
@@ -2747,6 +2971,14 @@ extern "C" void launcher_run(const char *root) {
                 float vs = fs * 1.4f, y = ImGui::GetWindowPos().y + ds.y - 134 * s;
                 ImVec2 vsz = font->CalcTextSizeA(vs, FLT_MAX, 0, ver.c_str());
                 text(ImVec2(right - vsz.x, y), vs, IM_COL32(255, 255, 255, 255), ver.c_str(), false);
+#ifdef __ANDROID__
+                {   // (S23) whose project this is: more in Settings > Files > Credits
+                    const char *credit = tr("Unofficial modification of BOTWRecompAndroid, by mamcjr");
+                    float cs = fs * 0.8f;
+                    ImVec2 csz = font->CalcTextSizeA(cs, FLT_MAX, 0, credit);
+                    text(ImVec2(right - csz.x, y - csz.y - 6 * s), cs, IM_COL32(225, 230, 245, 255), credit, false);
+                }
+#endif
                 pthread_mutex_lock(&g_update_lock);
                 std::string upd = g_update_tag;
                 pthread_mutex_unlock(&g_update_lock);

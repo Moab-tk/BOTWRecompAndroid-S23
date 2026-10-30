@@ -1005,10 +1005,15 @@ extern "C" bool menu_settings_back_requested() { bool back = g_touch_settings_ba
 
 static void tabs_body_sized(float scale, bool in_game, void (*prelaunch)(float));
 // (S23) Settings > Video > Interface size: every page's text, and its rows and buttons with it (they go by the font)
-static void tabs_body(float scale, bool in_game, void (*prelaunch)(float)) {
+extern "C" float menu_ui_scale() {
     static const float sizes[] = {1.0f, 1.3f, 1.6f};
     int u = g_settings.ui_size;
-    float k = sizes[u < 0 ? 0 : u > 2 ? 2 : u];
+    return sizes[u < 0 ? 0 : u > 2 ? 2 : u];
+}
+extern "C" bool menu_back_button(float scale) { return sheikah_button("Back", ImVec2(250 * scale, 62 * scale), 0, scale); }
+
+static void tabs_body(float scale, bool in_game, void (*prelaunch)(float)) {
+    float k = menu_ui_scale();
     ImGuiIO &io = ImGui::GetIO();
     float base = io.FontGlobalScale;
     io.FontGlobalScale = base * k;
