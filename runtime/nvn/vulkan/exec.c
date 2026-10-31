@@ -1093,9 +1093,31 @@ static Job *jobs_head, *jobs_tail;
 static pthread_mutex_t jobs_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t jobs_cond = PTHREAD_COND_INITIALIZER;
 
+// (S23) Where shader time goes, by kind of job (the [vk] builds line, renderer_stats)
+static void translate_program(void *arg);
+static void compile_program(void *arg);
+static void build_pipeline(void *arg);
+enum { BUILD_TRANSLATE, BUILD_COMPILE, BUILD_PIPE, BUILD_OTHER, BUILD_KINDS };
+static _Atomic int stat_build_n[BUILD_KINDS], stat_build_total[BUILD_KINDS], stat_taken, stat_same_code;
+static _Atomic uint64_t stat_build_ns[BUILD_KINDS], stat_build_worst[BUILD_KINDS];
+static void job_run(Job *j) {
+    int kind = j->fn == translate_program ? BUILD_TRANSLATE : j->fn == compile_program ? BUILD_COMPILE :
+               j->fn == build_pipeline ? BUILD_PIPE : BUILD_OTHER;
+    uint64_t t0 = plat_now_ns();
+    j->fn(j->arg);
+    uint64_t dt = plat_now_ns() - t0, worst = atomic_load(&stat_build_worst[kind]);
+    atomic_fetch_add(&stat_build_n[kind], 1);
+    atomic_fetch_add(&stat_build_total[kind], 1);
+    atomic_fetch_add(&stat_build_ns[kind], dt);
+    while (dt > worst && !atomic_compare_exchange_weak(&stat_build_worst[kind], &worst, dt)) {}
+    free(j);
+}
+
 #ifdef __ANDROID__
 #include <sys/syscall.h>
 #include <sys/resource.h>
+#define MAX_WORKERS 16
+static _Atomic int worker_tid[MAX_WORKERS], worker_count;  // (wait_built: the ones behind the game, back at normal priority)
 // (S23) A shader worker behind the game: low priority, and off the fastest cores (the prime core: the Galaxy S23's
 // Cortex-X3). An experiment against the bursts of 50+ ms frames seen playing (2026-10-29); the workers competing with the
 // game for those cores is a suspicion, not a measurement. Its cost: draws that wait for a shader wait longer (the
@@ -1132,6 +1154,10 @@ static void *worker(void *a) {
     (void)a;
 #ifdef __ANDROID__
     worker_behind_game();
+    {
+        int i = atomic_fetch_add(&worker_count, 1);
+        if (i < MAX_WORKERS) atomic_store(&worker_tid[i], (int)gettid());
+    }
 #endif
     for (;;) {
         pthread_mutex_lock(&jobs_lock);
@@ -1140,8 +1166,7 @@ static void *worker(void *a) {
         jobs_head = j->next;
         if (!jobs_head) jobs_tail = NULL;
         pthread_mutex_unlock(&jobs_lock);
-        j->fn(j->arg);
-        free(j);
+        job_run(j);
     }
     return NULL;
 }
@@ -1167,8 +1192,7 @@ static void *translator(void *a) {
         tjobs_head = j->next;
         if (!tjobs_head) tjobs_tail = NULL;
         pthread_mutex_unlock(&tjobs_lock);
-        j->fn(j->arg);
-        free(j);
+        job_run(j);
     }
     return NULL;
 }
@@ -1221,10 +1245,56 @@ static void run_job(void (*fn)(void *), void *arg) {
 // empty: no ground on the plateau). Draws into arrays, cubemaps, 3D textures and mipmapped targets wait for their
 // shader and pipeline instead (LARECOMP_WAIT_PERSISTENT=0: skip them like the rest).
 static uint64_t stat_build_wait_ns;
-static void wait_built(_Atomic int *state) {
+// (S23) This thread waiting on a job that may sit behind dozens, for workers that are behind the game on purpose: take
+// it out of the queue and do it here. A translation only moves up: the translator is one thread, and stays so.
+static Job *job_unlink(Job **head, Job **tail, void *arg) {
+    for (Job *j = *head, *prev = NULL; j; prev = j, j = j->next) {
+        if (j->arg != arg) continue;
+        if (prev) prev->next = j->next; else *head = j->next;
+        if (*tail == j) *tail = prev;
+        j->next = NULL;
+        return j;
+    }
+    return NULL;
+}
+static Job *job_take(void *arg) {
+    pthread_mutex_lock(&jobs_lock);
+    Job *j = job_unlink(&jobs_head, &jobs_tail, arg);
+    pthread_mutex_unlock(&jobs_lock);
+    return j;
+}
+static void translation_first(void *arg) {
+    pthread_mutex_lock(&tjobs_lock);
+    if (tjobs_head && tjobs_head->arg != arg) {
+        Job *j = job_unlink(&tjobs_head, &tjobs_tail, arg);
+        if (j) { j->next = tjobs_head; tjobs_head = j; if (!tjobs_tail) tjobs_tail = j; }
+    }
+    pthread_mutex_unlock(&tjobs_lock);
+}
+#ifdef __ANDROID__
+static void workers_nice(int nice) {  // (one already on the job, on a slow core: at the game's priority while it counts)
+    int n = atomic_load(&worker_count);
+    for (int i = 0; i < n && i < MAX_WORKERS; i++) {
+        int tid = atomic_load(&worker_tid[i]);
+        if (tid) setpriority(PRIO_PROCESS, (id_t)tid, nice);
+    }
+}
+#endif
+static void wait_built(_Atomic int *state, void *arg) {
     if (atomic_load(state)) return;
     uint64_t t0 = plat_now_ns();
-    while (!atomic_load(state)) usleep(200);
+#ifdef __ANDROID__
+    workers_nice(0);
+#endif
+    while (!atomic_load(state)) {
+        Job *j = job_take(arg);
+        if (j) { atomic_fetch_add(&stat_taken, 1); job_run(j); continue; }
+        translation_first(arg);
+        usleep(200);
+    }
+#ifdef __ANDROID__
+    workers_nice(10);
+#endif
     stat_build_wait_ns += plat_now_ns() - t0;
 }
 static bool rt_is_persistent(NvnTexture *t) {
@@ -1334,6 +1404,30 @@ const char *renderer_stats(void) {
              atomic_exchange(&stat_compiles, 0), (double)stat_build_wait_ns / 1e6, (unsigned long long)stat_feedback_copies, (unsigned long long)stat_feedback_reads, (unsigned long long)stat_inplace_breaks, (double)stat_upload_bytes / 1048576.0,
              (unsigned long long)stat_pipe_binds, (unsigned long long)stat_set_binds);
     stat_feedback_copies = stat_feedback_reads = stat_inplace_breaks = stat_upload_bytes = stat_build_wait_ns = stat_pipe_binds = stat_set_binds = 0;
+    {   // (S23) where the shader time of these seconds went: one line, when there was any
+        int n[BUILD_KINDS];
+        double ms[BUILD_KINDS], worst[BUILD_KINDS];
+        bool any = false;
+        for (int i = 0; i < BUILD_KINDS; i++) {
+            n[i] = atomic_exchange(&stat_build_n[i], 0);
+            ms[i] = atomic_exchange(&stat_build_ns[i], 0) / 1e6;
+            worst[i] = atomic_exchange(&stat_build_worst[i], 0) / 1e6;
+            any |= n[i] > 0;
+        }
+        if (any) {
+            int queued = 0, tqueued = 0;
+            pthread_mutex_lock(&jobs_lock);
+            for (Job *j = jobs_head; j; j = j->next) queued++;
+            pthread_mutex_unlock(&jobs_lock);
+            pthread_mutex_lock(&tjobs_lock);
+            for (Job *j = tjobs_head; j; j = j->next) tqueued++;
+            pthread_mutex_unlock(&tjobs_lock);
+            LOG("[vk] builds: translate %d %.0fms worst %.0f, compile %d %.0fms worst %.0f, pipeline %d %.0fms worst %.0f, other %d %.0fms; "
+                "same code %d, taken %d, queued %d+%d; total %d/%d/%d\n", n[0], ms[0], worst[0], n[1], ms[1], worst[1], n[2], ms[2], worst[2],
+                n[3], ms[3], atomic_exchange(&stat_same_code, 0), atomic_exchange(&stat_taken, 0), tqueued, queued,
+                atomic_load(&stat_build_total[0]), atomic_load(&stat_build_total[1]), atomic_load(&stat_build_total[2]));
+        }
+    }
     if (getenv("LARECOMP_LOG_CBUF_BYTES")) {
         LOG("[cbuf] fixed %llu x %.1f KB, dynamic %llu x %.1f KB; copied %.1f MB; in place, patched %llu\n",
             (unsigned long long)stat_cb_n[0], stat_cb_n[0] ? stat_cb_bytes[0] / 1024.0 / stat_cb_n[0] : 0,
@@ -2541,13 +2635,25 @@ static void translate_program(void *arg) {
         if (f) fclose(f);
     }
 #endif
+#ifdef __ANDROID__
+    {   // (S23, measuring) the same two translated shaders under another address: work a table by content would save
+        static uint64_t seen[32768];
+        uint64_t h = hmix(1469598103934665603ull, p->vi->msl, strlen(p->vi->msl));
+        h = hmix(h, p->fi->msl, strlen(p->fi->msl));
+        if (!h) h = 1;
+        uint32_t s = (uint32_t)(h ^ (h >> 31)) & 32767;
+        for (int i = 0; i < 64 && seen[s] && seen[s] != h; i++) s = (s + 1) & 32767;
+        if (seen[s] == h) atomic_fetch_add(&stat_same_code, 1);
+        else seen[s] = h;
+    }
+#endif
     p->vs_uses_vid = strstr(p->vi->msl, "gl_VertexIndex") != NULL;
     save_glsl(p->vi->msl, p->code[0], "vs");
     save_glsl(p->fi->msl, p->code[1], "fs");
     run_job(compile_program, p);
 }
 
-#define PROG_TAB 4096
+#define PROG_TAB 32768  // (S23: was 4096; the search below never ends on a full table)
 static struct { uint64_t key; Prog *prog; } prog_tab[PROG_TAB];
 
 static Prog *get_program(NvnProgram *np, ShaderKey *vkey, ShaderKey *fkey) {
@@ -2818,7 +2924,7 @@ typedef struct {
 } PipeKey;
 
 typedef struct { PipeKey k; uint64_t hash; VkPipeline pipe; _Atomic int state; } Pipe;  // state: 0 building, 1 ready, 2 failed
-#define PIPE_TAB 8192
+#define PIPE_TAB 65536  // (S23: was 8192, as PROG_TAB)
 static struct { uint64_t key; Pipe *pipe; } pipe_tab[PIPE_TAB];
 
 // 8 bytes a step (PipeKey is ~700 bytes, hashed per draw); in-memory tables only - hmix values are compared with
@@ -5626,7 +5732,7 @@ static void draw_(CmdRec *r, bool indexed) {
         }
         keep = kkeep;
     }
-    if (pr && keep) wait_built(&pr->state);
+    if (pr && keep) wait_built(&pr->state, pr);
     if (!pr || atomic_load(&pr->state) != 1) { stat_skipped++; skip_note("shader"); return; }
     {   // fragment-shader hash: interior backdrop detection (widescreen), skip lists, item twinkle (renderer.m)
         static uint64_t last_fs, last_hash;
@@ -6071,7 +6177,7 @@ static void draw_(CmdRec *r, bool indexed) {
         last_pipeline = pp;
         pipeline_dirty = false;
     }
-    if (keep) wait_built(&pp->state);
+    if (keep) wait_built(&pp->state, pp);
     if (atomic_load(&pp->state) != 1) {
         if (g_debug_frame) LOG("[draw]   skipped: pipeline %s\n", atomic_load(&pp->state) ? "failed" : "still building");
         stat_skipped++;
