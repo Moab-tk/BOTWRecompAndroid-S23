@@ -1,6 +1,6 @@
 # BOTWRecompAndroid
 
-[English](README.md) | **Português**
+[English](README-ORIGINAL.md) | **Português**
 
 Uma recompilação estática de *The Legend of Zelda: Breath of the Wild* (Nintendo Switch, versões **1.0.0, 1.6.0 e
 1.8.2**) para Android. **Não é emulação**: o código ARM64 do jogo vira C compilado para o seu celular, e os gráficos

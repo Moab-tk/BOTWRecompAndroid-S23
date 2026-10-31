@@ -1,104 +1,142 @@
-# BOTWRecompAndroid
+# BOTW S23
 
-**English** | [Português](README.pt-BR.md)
-
-A static recompilation of *The Legend of Zelda: Breath of the Wild* (Nintendo Switch, versions **1.0.0, 1.6.0 and
-1.8.2**) for Android. This is **not emulation**: the game's ARM64 code becomes C compiled for your phone, and its
-graphics (NVN) are translated to Vulkan.
-
-It is built on the engine of **[LAS Recomp](https://github.com/peiikai/LASRecomp)** by peiikai (a recompilation of
-*Link's Awakening*) and its Android port, **[LASRecompAndroid](https://github.com/mamcjr/LASRecompAndroid)**.
-
-> [!WARNING]
-> **Beta.** Tested on one phone only (POCO F7 Ultra, Adreno 830, Mesa Turnip driver). Expect bugs. The plan and the
-> state of each phase are in [docs/BOTW-PORT.md](docs/BOTW-PORT.md) (in Portuguese).
-
-## Supported platform
-
-Android is the only application target. Desktop ports and packaging were discontinued on 2026-10-22.
-Windows, Linux or macOS may still be used as development hosts with the Android SDK/NDK.
-
-## Status
-
-- **Playable** from the title screen into the world, with saves, on the POCO F7 Ultra: 1.0.0 and 1.6.0 at 30 fps,
-  1.8.2 at 30 or up to 60 (about 40-47 fps in the open world with a Turnip driver).
-- **1.8.2** has Brazilian Portuguese, widescreen (Video > Aspect ratio "Unlocked": the view widens, the HUD goes to
-  the screen's edges) and SavageWindRecomp's frame pacing.
-- **Video:** internal resolution, AMD FSR 1 / Snapdragon GSR 1 upscaling, output resolution, SMAA.
-- **App:** game files set up from the phone (each version in its own folder, switched on the Game Files page), touch
-  controls, controllers, mods, menus in English and Portuguese, Vulkan driver choice (Turnip via adrenotools) and
-  driver compatibility options.
-- **Known gaps:** setting the game up on the phone compiles the game code there, and that has not been timed or
-  tested with BOTW yet (expect a long wait and a hot phone); GPUs other than Adreno 8xx take slower, safer paths;
-  thumbnails of saves made in the app are black; the audio still uses a simplified mixer.
-- **Known issue: stretched terrain after a Sheikah Tower.** Right after a tower's activation cutscene, the terrain
-  can show vertical "curtains" or spikes (cliffs and distant mountains stretched up into the sky). It happens with
-  every Vulkan driver and is being investigated. **Workaround:** once the tower is activated, load the save (the
-  autosave from right after the activation is fine) and the terrain is drawn correctly again.
+Modificação **não oficial** do [BOTWRecompAndroid](https://github.com/mamcjr/BOTWRecompAndroid), ajustada para o
+**Samsung Galaxy S23 Ultra** (Snapdragon 8 Gen 2, Adreno 740).
 
 > [!IMPORTANT]
-> Like LAS Recomp, this project is made almost entirely with AI (Claude, by Anthropic, through Claude Code), directed,
-> tested and reviewed by a human.
+> **Todo o crédito do projeto é de [mamcjr](https://github.com/mamcjr), autor do BOTWRecompAndroid, e de
+> [peiikai](https://github.com/peiikai), autor do LAS Recomp, de onde tudo parte.** Esta versão é só uma modificação
+> feita com IA a partir das ideias de uma pessoa. Não é feita nem tem suporte dos autores originais, então não leve
+> problemas daqui até eles.
 
 > [!NOTE]
-> **No game files are included.** You need your own legally obtained dump of *Breath of the Wild* 1.0.0, 1.6.0 or
-> 1.8.2 (`exefs` and `romfs`, extracted). Instructions on how to obtain it will not be provided.
+> Não leve nada a sério. Se não der certo no seu celular, é só deixar para lá e baixar a versão que achar melhor.
 
-## Installing (beta)
+O texto original do projeto, com todos os detalhes técnicos, está em [README-ORIGINAL.md](README-ORIGINAL.md). A lista
+do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
 
-1. Download the APK from [Releases](https://github.com/mamcjr/BOTWRecompAndroid/releases) and install it (Android 11+,
-   arm64, Vulkan; about 30 GB free per game version).
-2. Open it, go to **Set up game files** and choose the folder with your `exefs` and `romfs`. The version is told from
-   the files. The app copies what it needs and builds the game code on the phone.
-3. On Adreno phones, a Mesa Turnip driver (Settings > Files > Vulkan driver) runs the game much faster than the
-   system driver. If the app stops at start with "Vulkan driver is too old", long-press the app icon and choose
-   **Choose driver** to pick one before the game starts.
+## Sem arquivos do jogo
 
-## Testing on Android (developers)
+**Nenhum arquivo do jogo vem incluído.** Você precisa do seu próprio dump, obtido legalmente, de *Breath of the Wild*
+(`exefs` e `romfs`, extraídos). Não serão dadas instruções de como obtê-lo.
 
-With the Android SDK / NDK, a phone on adb and your dump in `Dump/`:
+## O que esta versão tem de diferente
 
-```bash
-cd android/botwrecompandroid && ./gradlew assembleDebug    # the app
-android/build_gamelib.sh Dump/01007EF00011E000/exefs  # the game code (about an hour)
-android/push_game.sh Dump/01007EF00011E000           # game files and game code onto the phone
-android/run_boot.sh 120                               # start the game, log to android/out/boot.log
-```
+- **Compilada para o processador do S23**, sem as instruções que ele não tem.
+- **Instala ao lado do original:** o pacote é outro (`com.botwrecomp.android.s23`), então uma versão não substitui a
+  outra.
+- **Dois drivers Turnip já no aplicativo**, em Configurações > Arquivos > Driver Vulkan, com o indicado para o seu
+  celular marcado como Recomendado.
+- **Configurações recomendadas com um toque**, as mesmas testadas no S23 Ultra.
+- **Configurações salvas:** 8 blocos para guardar tudo o que você ajustou e voltar quando um teste piorar.
+- **Interface maior e mais fácil de tocar:** escolha de tamanho do texto, nomes longos que deslizam, opções em cartões.
+- **Ritmo de quadros ajustado** para a tela de 120 Hz, com hora marcada para mostrar cada quadro.
+- **Menos risco de travar em sessões longas**, com tabelas de shaders maiores. A lista completa está em
+  [MUDANCAS-S23.md](MUDANCAS-S23.md).
 
-## Credits
+## Instalando
 
-- [peiikai](https://github.com/peiikai) for [LAS Recomp](https://github.com/peiikai/LASRecomp), the recompiler and
-  runtime this project starts from (MIT, see [LICENSE](LICENSE)). The original README is kept in [docs/las/](docs/las/).
-- [LASRecompAndroid](https://github.com/mamcjr/LASRecompAndroid), its Android port: the app, the phone-side game code
-  build, touch controls, mods, driver compatibility and the Portuguese menus.
-- [Revivedx](https://github.com/Revivedx) for [SavageWindRecomp](https://github.com/Revivedx/SavageWindRecomp) (MIT),
-  the reference for 1.8.2: frame pacing, internal resolution, the SDK 20 kernel fixes, setjmp.
-- [Nycolazs](https://github.com/Nycolazs) for LASRecomp-Android-Plus (MIT): Vulkan driver compatibility.
-- [ly05010419](https://github.com/ly05010419) for [MacNativeGames](https://github.com/ly05010419/MacNativeGames) (MIT),
-  whose fixes and notes for BOTW and TOTK pointed the way for several here: the sync lag (its PR #680), GPU results
-  the CPU reads back (PR #239), the terrain's height map texture (PR #511), texture layout, and the gyroscope's drift;
-  and for showing that the game's own ARM64 code can run directly (Native game code).
-- [OJZen](https://github.com/OJZen) for [totk-mobile](https://github.com/OJZen/totk-mobile), and
-  [jhaizhou-ops](https://github.com/jhaizhou-ops) for [d2r-mobile](https://github.com/jhaizhou-ops/d2r-mobile), the
-  core it builds on: what the native mode rewrites in the game's code (`svc`, the thread registers, the counter) and
-  how - the idea behind ours (no code taken).
-- The [zeldaret/botw](https://github.com/zeldaret/botw) decompilation and [open-ead/sead](https://github.com/open-ead/sead),
-  for what is known about the game's code.
-- Dusklight's launcher, the start screen's style.
-- Upscaling and anti-aliasing: [AMD FidelityFX FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR) (MIT),
-  [Qualcomm Snapdragon GSR](https://github.com/SnapdragonStudios/snapdragon-gsr) (BSD-3-Clause),
-  [SMAA](https://github.com/iryoku/smaa) (MIT).
-- Libraries: [SDL](https://libsdl.org) (zlib), [Dear ImGui](https://github.com/ocornut/imgui) (MIT),
-  [libadrenotools](https://github.com/bylaws/libadrenotools) (BSD-2-Clause), [volk](https://github.com/zeux/volk) (MIT),
-  [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator) (MIT),
-  [shaderc](https://github.com/google/shaderc) (Apache 2.0), [FFmpeg](https://ffmpeg.org) (LGPL),
-  [LZ4](https://github.com/lz4/lz4) (BSD-2-Clause), [Capstone](https://www.capstone-engine.org) (BSD-3-Clause),
-  [Unicorn](https://www.unicorn-engine.org) (GPLv2, built from its source by `android/deps/build_unicorn.sh`),
-  [Python](https://www.python.org) (PSF) and [Zig](https://ziglang.org) (MIT) for the phone-side build.
-- [Mesa](https://www.mesa3d.org)'s Turnip driver (MIT), which players load themselves.
-- Fonts: [Baloo 2](https://github.com/EkType/Baloo2) (OFL), DejaVu Sans (Bitstream Vera license). The Android robot
-  is reproduced or modified from work created and shared by Google (CC BY 3.0).
-- Made with [Claude Code](https://claude.com/claude-code) (Anthropic).
+Você precisa de Android 11 ou mais novo, de um celular arm64 com Vulkan e de cerca de 30 GB livres por versão do jogo.
 
-*The Legend of Zelda* and *Breath of the Wild* are trademarks of Nintendo. This project is not affiliated with or
-endorsed by Nintendo.
+1. Baixe o APK na aba **Releases** desta página e instale.
+2. Abra, entre em **Configurar arquivos do jogo** e escolha a pasta com o seu `exefs` e `romfs`.
+3. Espere terminar. Na primeira vez, o celular pode demorar e esquentar.
+4. Na tela inicial, abra **Configurações salvas** e toque em **Usar configurações recomendadas**.
+5. Confirme. O app reinicia e o jogo está pronto para jogar.
+
+Atualizando uma versão anterior desta modificação, basta instalar por cima: os saves e as configurações continuam.
+
+## Configurações recomendadas
+
+Esses são os valores que o botão aplica:
+
+| Opção | Valor |
+|---|---|
+| Limite de quadros | 30 FPS |
+| Resolução interna | 1x |
+| Resolução de saída | 900 linhas |
+| Ampliação da imagem | FSR 1 |
+| Suavização | Desligada |
+| Código do jogo | Nativo |
+| Apresentação | FIFO |
+| Compatibilidade do driver | Tudo ligado |
+| Driver | Turnip recomendado para o seu celular |
+
+O formato da tela, o som, os controles, os mods e os saves não mudam.
+
+## Qual driver usar
+
+Os dois vêm da mesma versão (`v27.0.0-20261025-r5`, de
+[The412Banner](https://github.com/The412Banner/Banners-Turnip)), feita a partir do Mesa.
+
+| Seu celular | Driver |
+|---|---|
+| Galaxy S23, com One UI | `Turnip-v27.0.0-20261025-r5-8G2-OneUI` |
+| Outro Snapdragon 8 Gen 2 | `Turnip-v27.0.0-20261025-r5` |
+| Outras GPUs Adreno 6xx e 7xx | `Turnip-v27.0.0-20261025-r5`, sem garantia |
+
+O de One UI pode fazer a tela piscar em celulares que não são Samsung. Em outros aparelhos, nada aqui foi testado.
+
+## Desempenho medido
+
+Estes números são de um único aparelho e não são promessa. Nas duas partidas abaixo: S23 Ultra, jogo na versão 1.8.2,
+código nativo, 30 FPS, resolução 1x, saída 900. A primeira é da b6 e a segunda é de uma etapa anterior da b7; a b7
+final ainda não foi medida.
+
+| Medição | FPS médio | Medições abaixo de 29 FPS | Picos de 100 ms ou mais |
+|---|---:|---:|---:|
+| 10 minutos em lugares variados | 29,9 | 6 de 290 | 1 |
+| 11 minutos em áreas nunca visitadas | 29,9 | 5 de 341 | 5 |
+
+Cada medição cobre 2 segundos de jogo.
+
+> [!WARNING]
+> Essas partidas foram feitas com **cooler no celular** e com o **limitador térmico do sistema desativado pelo dono do
+> aparelho**, por ferramentas de terceiros. Isso não faz parte do app e não é recomendado aqui: desativar a proteção
+> térmica é por sua conta e risco. O chip passou de 80 °C. Sem cooler, espere menos desempenho.
+
+## Problemas conhecidos
+
+- **Paredes verticais no terreno ("cortinas"):** o chão pode virar paredes ou picos esticados, principalmente depois da
+  cena de ativar uma Torre Sheikah. O defeito vem do projeto original e aparece com qualquer driver. Esta versão tem
+  uma tentativa de correção, ainda sem confirmação. Se acontecer, carregue um save feito depois.
+- **Engasgadas em áreas novas:** na primeira visita, um shader pode levar de 250 a 300 ms para ficar pronto. Depois ele
+  fica guardado no celular, então as próximas visitas tendem a ser mais leves.
+- **Testada em um celular só.** Em outro aparelho, tudo pode ser diferente.
+- **Proporção da tela:** há relato de defeito em tela cheia e em 16:9, ainda sem causa encontrada.
+- **Geração de quadros (Lossless Scaling):** foi testada e retirada, porque no S23 os quadros reais caíram para 15 a 23
+  FPS. Esta versão não tem essa opção.
+
+## Opções de teste
+
+Em Configurações > Arquivos > Testes há opções que vêm desligadas: manter a GPU acordada, modo de apresentação, núcleos
+para shaders, filtro anisotrópico e modo do Turnip. Teste uma por vez e salve um bloco antes. **Manter a GPU acordada**
+não teve ganho comprovado e, se o sistema fechar o app à força, pode continuar ligada até você abrir o app de novo ou
+reiniciar o celular.
+
+## Compilando
+
+Os passos são os do projeto original, em [README-ORIGINAL.md](README-ORIGINAL.md). O release usa uma chave própria, que
+fica fora do repositório em `~/.botwrecompandroid/keystore.properties`. Sem ela, compile a versão de depuração.
+
+## Créditos
+
+- **[mamcjr](https://github.com/mamcjr)**, pelo [BOTWRecompAndroid](https://github.com/mamcjr/BOTWRecompAndroid) e pelo
+  [LASRecompAndroid](https://github.com/mamcjr/LASRecompAndroid): esta modificação existe por causa desse trabalho.
+- **[peiikai](https://github.com/peiikai)**, pelo [LAS Recomp](https://github.com/peiikai/LASRecomp) (licença MIT), o
+  recompilador e o motor de onde tudo parte.
+- [Revivedx](https://github.com/Revivedx), pelo [SavageWindRecomp](https://github.com/Revivedx/SavageWindRecomp);
+  [Nycolazs](https://github.com/Nycolazs), pelo LASRecomp-Android-Plus; a decompilação
+  [zeldaret/botw](https://github.com/zeldaret/botw) e o [open-ead/sead](https://github.com/open-ead/sead).
+- [tib-kpl](https://github.com/tib-kpl/BOTWRecompAndroid), pela correção das páginas de comando trazida para a b4.
+- [The412Banner](https://github.com/The412Banner/Banners-Turnip), pelas versões do driver, e o projeto
+  [Mesa](https://www.mesa3d.org), pelo driver Turnip.
+- [AMD FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR),
+  [Snapdragon GSR](https://github.com/SnapdragonStudios/snapdragon-gsr), [SMAA](https://github.com/iryoku/smaa) e
+  [libadrenotools](https://github.com/bylaws/libadrenotools). As demais bibliotecas e licenças estão em
+  [README-ORIGINAL.md](README-ORIGINAL.md).
+- Modificações feitas com o [Claude Code](https://claude.com/claude-code) (Anthropic), dirigidas e testadas por uma
+  pessoa.
+
+*The Legend of Zelda* e *Breath of the Wild* são marcas da Nintendo. Este projeto não é afiliado nem endossado pela
+Nintendo. A licença do código está em [LICENSE](LICENSE); os componentes de terceiros mantêm as licenças deles.
