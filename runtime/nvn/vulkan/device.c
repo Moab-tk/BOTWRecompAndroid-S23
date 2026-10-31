@@ -17,7 +17,6 @@
 #include "../output_scale.h"
 #include "../renderer.h"
 #ifdef __ANDROID__
-#include "framegen.h"
 #endif
 
 VkG g_vk;
@@ -550,16 +549,6 @@ static void create_device(void) {
         if (g_vk.display_timing) ext[n_ext++] = VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME;
         LOG("[vk] present timing %s\n", g_vk.display_timing ? "on (VK_GOOGLE_display_timing)"
                                         : e && !atoi(e) ? "off (LARECOMP_PRESENT_TIMING=0)" : "off: the driver lacks it");
-        // (S23) frame generation shares images and sync files with its library's device: only with a Lossless.dll
-        // imported (framegen.c; importing one restarts the app)
-        g_vk.framegen_ext = fg_dll_present() && has_ext(ep, ne, VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME) &&
-                            has_ext(ep, ne, VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME) &&
-                            has_ext(ep, ne, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
-        if (g_vk.framegen_ext) {
-            ext[n_ext++] = VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME;
-            ext[n_ext++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
-            ext[n_ext++] = VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME;
-        }
     }
     // LARECOMP_SHADER_STATS=1: each graphics pipeline's compiled shaders described in the log (registers, waves,
     // spills, instructions: exec.c build_pipeline), for finding what makes a translated shader slow on this GPU
@@ -906,14 +895,7 @@ void vk_pipeline_cache_save(void) {
 
 // ================================================================== swapchain
 static bool swapchain_readback = true;  // (Android: false where the surface can't be a transfer source)
-#ifdef __ANDROID__
-static bool g_sc_fg_asked, g_sc_framegen;  // (S23) the swapchain was made for frame generation; and it can do it
-#endif
 static VkPresentModeKHR present_mode(void) {
-#ifdef __ANDROID__
-    // (S23) every generated frame must reach the screen: MAILBOX would replace it with the real one right behind it
-    if (fg_swapchain_wanted()) return VK_PRESENT_MODE_FIFO_KHR;
-#endif
     // MAILBOX by default: the game paces itself (vi.c's emulated 60 Hz vsync), and with FIFO every submission
     // queued behind the one waiting for a window image, so the game's fence waits followed the presentation engine:
     // a throttled / captured / busy compositor slowed the whole game (4-21 fps with the GPU mostly idle; mailbox:
@@ -994,10 +976,6 @@ static void create_swapchain(void) {
     for (uint32_t i = 0; i < nf; i++)
         if (fmts[i].format == VK_FORMAT_B8G8R8A8_UNORM && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) { sf = fmts[i]; break; }
     uint32_t count = caps.minImageCount + 1;
-#ifdef __ANDROID__
-    bool fg = fg_swapchain_wanted();
-    if (fg) count += 1 + FG_MAX;  // (the real frame waits in its image while the generated ones acquire theirs)
-#endif
     if (caps.maxImageCount && count > caps.maxImageCount) count = caps.maxImageCount;
     if (count > 8) count = 8;  // (asked for: the driver may make more, up to VK_MAX_SWAP_IMAGES)
     if (count < caps.minImageCount) count = caps.minImageCount;
@@ -1007,10 +985,6 @@ static void create_swapchain(void) {
     if (count > VK_MAX_SWAP_IMAGES)
         FATAL("Surface needs %u swapchain images; renderer supports at most %d.\n", caps.minImageCount, VK_MAX_SWAP_IMAGES);
     VkImageUsageFlags usage = vk_backend_swapchain_usage(caps.supportedUsageFlags);
-    const VkImageUsageFlags fg_usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    if (fg) usage |= caps.supportedUsageFlags & fg_usage;
-    g_sc_fg_asked = fg;
-    g_sc_framegen = fg && (usage & fg_usage) == fg_usage;
     VkCompositeAlphaFlagBitsKHR alpha = vk_backend_composite_alpha(caps.supportedCompositeAlpha);
     if (!usage || !alpha) FATAL("Vulkan surface lacks supported color rendering or composition (usage %#x alpha %#x).\n",
                                caps.supportedUsageFlags, caps.supportedCompositeAlpha);
@@ -1181,9 +1155,6 @@ bool vk_frame_begin(const float clear[4]) {
     if (!android_surface_ready()) return false;
 #endif
     if (!g_vk.swapchain || (uint32_t)w != g_vk.sc_extent.width || (uint32_t)h != g_vk.sc_extent.height) recreate_swapchain();
-#ifdef __ANDROID__
-    else if (g_sc_fg_asked != fg_swapchain_wanted()) recreate_swapchain();  // (frame generation turned on or off)
-#endif
     if (!g_vk.swapchain) return false;
     static int trace = -1;
     if (trace < 0) trace = getenv("LARECOMP_VK_TRACE") != NULL;
@@ -1273,14 +1244,6 @@ static void save_window_image(VkCommandBuffer cb, VkSpan *out) {
 }
 
 #ifdef __ANDROID__
-// (S23) How long after its grid time a frame generation frame goes out: room for the GPU and the library
-// (one period; LARECOMP_FG_DELAY_MS=<ms>). Late ones just show when ready: FIFO keeps their order.
-static uint64_t fg_delay_ns(uint64_t period) {
-    static long long ms10 = -1;
-    if (ms10 < 0) ms10 = getenv("LARECOMP_FG_DELAY_MS") ? (long long)(atof(getenv("LARECOMP_FG_DELAY_MS")) * 10) : 0;
-    return ms10 > 0 ? (uint64_t)ms10 * 100000ull : period;
-}
-
 // (S23) How long after its grid time a frame goes out: room for the GPU to finish it. Half a period by default (a whole
 // one adds its 33 ms to every button press); a frame that takes longer shows when ready, as without this.
 // LARECOMP_PRESENT_DELAY_MS=<ms>.
@@ -1295,44 +1258,7 @@ static uint64_t g_frame_grid;  // the frame being presented (render thread): vk_
 void vk_present_set_grid(uint64_t grid) { g_frame_grid = grid; }
 
 static uint32_t g_present_id;
-void vk_submit_extra2(VkSemaphore wait, VkSemaphore wait2, VkSemaphore signal, VkSemaphore signal2, VkPipelineStageFlags2 wait_stage);
 
-// A generated frame into a window image of its own, shown at `due`. ready_fd: the library's sync file (-1: it is done).
-// No window image at once: this one is dropped - the real frame is what must not wait.
-static void fg_show(int i, int ready_fd, uint64_t due) {
-    enum { RING = 8 };
-    static VkSemaphore acq[RING], ready[RING];
-    static uint64_t seqs[RING];
-    static int r;
-    r = (r + 1) % RING;
-    if (!acq[r]) acq[r] = binary_semaphore(), ready[r] = binary_semaphore();
-    vk_wait_seq(seqs[r]);
-    uint32_t img;
-    VkResult x = vkAcquireNextImageKHR(g_vk.dev, g_vk.swapchain, 4000000, acq[r], VK_NULL_HANDLE, &img);
-    if (x != VK_SUCCESS && x != VK_SUBOPTIMAL_KHR) {
-        if (ready_fd >= 0) close(ready_fd);
-        return;
-    }
-    VkSemaphore wait2 = VK_NULL_HANDLE;
-    if (ready_fd >= 0) {
-        VkImportSemaphoreFdInfoKHR imp = {.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR, .semaphore = ready[r],
-                                          .flags = VK_SEMAPHORE_IMPORT_TEMPORARY_BIT,
-                                          .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT, .fd = ready_fd};
-        if (vkImportSemaphoreFdKHR(g_vk.dev, &imp) == VK_SUCCESS) wait2 = ready[r];
-        else close(ready_fd);
-    }
-    fg_copy_out(vk_cmd(), i, g_vk.sc_images[img], g_vk.sc_extent);
-    if (!done_sem[img]) done_sem[img] = binary_semaphore();
-    seqs[r] = vk_pending_seq();
-    fg_out_used(seqs[r]);
-    vk_submit_extra2(acq[r], wait2, done_sem[img], VK_NULL_HANDLE, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);  // (a transfer waits)
-    VkPresentTimeGOOGLE t = {.presentID = ++g_present_id, .desiredPresentTime = due};
-    VkPresentTimesInfoGOOGLE times = {.sType = VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE, .swapchainCount = 1, .pTimes = &t};
-    VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .pNext = &times, .waitSemaphoreCount = 1,
-                           .pWaitSemaphores = &done_sem[img], .swapchainCount = 1, .pSwapchains = &g_vk.swapchain, .pImageIndices = &img};
-    VkResult p = vkQueuePresentKHR(g_vk.queue, &pi);
-    if (p == VK_ERROR_SURFACE_LOST_KHR) surface_lost = true;  // (out of date: the real frame's present deals with it)
-}
 #endif
 
 // End rendering into the window image and present it. shot_path: also save the window image as PNG.
@@ -1347,37 +1273,14 @@ void vk_frame_end(const char *shot_path) {
     VkSpan shot = {0};
     if (shot_path) save_window_image(cb, &shot);
 #ifdef __ANDROID__
-    // (S23) frame generation (framegen.c): a copy of the finished frame goes to its library
     uint64_t grid = g_frame_grid;  // (0: not a paced game frame - the start screen, a menu drawn over a still game)
     g_frame_grid = 0;
-    int fg_gens = shot_path ? -1 : fg_frame_start(g_vk.sc_extent, grid != 0);
-    if (!g_sc_framegen) fg_gens = -1;
-    if (fg_gens >= 0) {
-        VkImage win = g_vk.sc_images[cur_frame.image];
-        image_barrier(cb, win, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        fg_copy_in(cb, win, g_vk.sc_extent);
-        image_barrier(cb, win, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-    } else
 #endif
     image_barrier(cb, g_vk.sc_images[cur_frame.image], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     uint32_t img = cur_frame.image;
     if (!done_sem[img]) done_sem[img] = binary_semaphore();
     uint64_t seq = vk_pending_seq();
-#ifdef __ANDROID__
-    vk_submit_extra2(cur_frame.acquired, VK_NULL_HANDLE, done_sem[img], fg_gens >= 0 ? fg_in_semaphore() : VK_NULL_HANDLE,
-                     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-    uint64_t fg_due = 0;  // (the real frame's time, after the generated ones)
-    if (fg_gens >= 0) {
-        int ready[FG_MAX];
-        int got = fg_run(fg_gens, ready);
-        extern uint64_t framepace_period_ns(void);
-        uint64_t period = framepace_period_ns(), delay = fg_delay_ns(period);
-        for (int i = 0; i < got; i++) fg_show(i, ready[i], grid + delay + (uint64_t)i * period / (uint64_t)(got + 1));
-        if (got > 0) fg_due = grid + delay + (uint64_t)got * period / (uint64_t)(got + 1);
-    }
-#else
     vk_submit_extra(cur_frame.acquired, done_sem[img], VK_NULL_HANDLE);
-#endif
     VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &done_sem[img],
                            .swapchainCount = 1, .pSwapchains = &g_vk.swapchain, .pImageIndices = &img};
 #ifdef __ANDROID__
@@ -1390,7 +1293,7 @@ void vk_frame_end(const char *shot_path) {
     {
         extern int vk_ab(const char *what);
         extern uint64_t plat_now_ns(void);
-        uint64_t due = fg_due ? fg_due : grid ? grid + present_delay_ns() : 0;
+        uint64_t due = grid ? grid + present_delay_ns() : 0;
         int ab = vk_ab("timing");  // (LARECOMP_AB=<frames>:timing: -1 when not under test)
         static int last_ab = -2;
         if (ab != last_ab && ab >= 0) LOG("[ab] timing %d from %llu\n", ab, (unsigned long long)plat_now_ns());

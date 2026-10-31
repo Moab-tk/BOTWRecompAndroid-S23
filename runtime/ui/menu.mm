@@ -513,23 +513,10 @@ extern "C" void renderer_get_scale(float *sx, float *sy);        // (the final i
 extern "C" int input_pad_family(void);  // runtime/hle/input.c
 extern "C" double output_scale_dynamic_factor(void);
 
-#ifdef __ANDROID__
-extern "C" bool fg_dll_present(void);  // (vulkan/framegen.c)
-#endif
 static void tab_display(void) {
     float scale = ImGui::GetFontSize() / 34;
     opt_begin("##video", scale);
     opt_section("Display");
-#ifdef __ANDROID__
-    if (fg_dll_present()) {  // (S23: Settings > Files imports the file)
-        const char *gens[] = {"Off", "2x", "3x"};
-        const char *models[] = {"Light", "Quality"};
-        opt_choice("Frame generation", &g_settings.framegen, gens, 3, 0,
-                   "Lossless Scaling shows generated frames between the real ones: smoother movement, but the game still answers at its real frame rate, a little later, and the GPU works harder. Off: only real frames.");
-        opt_choice("Frame generation model", &g_settings.framegen_model, models, 2, 0,
-                   "Light: less work for the GPU. Quality: better motion, more heat.");
-    }
-#endif
     const char *ui_sizes[] = {"Normal", "Large", "Extra large"};
     if (opt_choice("Interface size", &g_settings.ui_size, ui_sizes, 3, 1,
                    "The size of the text and buttons on these pages. Long names slide by themselves when they don't fit."))

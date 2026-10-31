@@ -892,19 +892,6 @@ extern "C" JNIEXPORT void JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidAc
     set_job_detail(detail);
 }
 
-// (S23) Settings > Files: the Lossless.dll imported (0), not one (1), removed (2)
-static std::string g_fg_msg;
-static bool g_fg_restart;
-extern "C" bool fg_dll_present(void);
-extern "C" const char *fg_status(void);
-extern "C" JNIEXPORT void JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidActivity_nativeLosslessPicked(JNIEnv *, jclass, jint result) {
-    pthread_mutex_lock(&g_lock);
-    g_fg_msg = tr(result == 0 ? "Lossless.dll imported. Restart to use it." : result == 2 ? "Lossless.dll removed. Restart to finish." :
-                  "That file isn't a Lossless.dll.");
-    g_fg_restart = result != 1;
-    pthread_mutex_unlock(&g_lock);
-}
-
 extern "C" JNIEXPORT void JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidActivity_nativeDriverPicked(JNIEnv *env, jclass, jstring name) {
     const char *n = env->GetStringUTFChars(name, NULL);
     pthread_mutex_lock(&g_lock);
@@ -1567,27 +1554,6 @@ static void prelaunch_rows(float sc) {
         note_row(msg);
     }
 
-    opt_section("Frame generation (Lossless Scaling)");
-    {   // (the file is the player's own and stays on the phone: BOTWRecompAndroidActivity.importLossless)
-        bool have = fg_dll_present();
-        const char *about = "Generated frames between the real ones (the switch is in the Video tab). It needs the Lossless.dll of "
-                            "your own copy of Lossless Scaling, from its Steam folder. The file stays on this phone and is never "
-                            "part of the app.";
-        if (opt_action("Choose Lossless.dll", tr(have ? "Imported" : "Not imported"), about)) android_call("pickLossless");
-        if (have && opt_button("Remove Lossless.dll", about)) android_call("removeLossless");
-        pthread_mutex_lock(&g_lock);
-        std::string msg = g_fg_msg;
-        bool restart = g_fg_restart;
-        pthread_mutex_unlock(&g_lock);
-        if (restart && opt_button("Restart now##fg", "The file is read when the app starts.")) android_call("restartApp");
-        note_row(msg);
-        if (*fg_status()) {
-            char m[320];
-            snprintf(m, sizeof m, tr("Frame generation stopped: %s"), fg_status());
-            note_row(m, true);
-        }
-    }
-
     opt_section("Saves");
     {
         pthread_mutex_lock(&g_lock);
@@ -1757,7 +1723,7 @@ static void prelaunch_rows(float sc) {
                    "LASRecompAndroid, by mamcjr, its Android port.");
         opt_action("Other projects", "",
                    "SavageWindRecomp, by Revivedx. LASRecomp-Android-Plus, by Nycolazs. The zeldaret/botw decompilation and "
-                   "open-ead/sead. AMD FSR 1, Snapdragon GSR and SMAA. Bloodframe, by Cid (ducvd89), on top of lsfg-vk. "
+                   "open-ead/sead. AMD FSR 1, Snapdragon GSR and SMAA. "
                    "libadrenotools. Mesa's Turnip driver, in The412Banner's builds.");
         opt_action("About this version", "Unofficial",
                    "An unofficial modification for the Samsung Galaxy S23, made with AI from one person's ideas. It isn't made "
@@ -1792,7 +1758,6 @@ static void recommended_apply() {
     g_settings.sync_lag = true;
     g_settings.native_code = true;
     g_settings.gpu_heap = g_settings.inplace_reads = g_settings.turnip_lrz = 1;
-    g_settings.framegen = 0;
     g_settings.gpu_turbo = false;
     g_settings.present_fifo = true;
     g_settings.shader_workers = 0;
@@ -2013,37 +1978,6 @@ static void prelaunch_tab(float sc) {
             if (restart) {
                 ImGui::SameLine();
                 if (ImGui::Button(tr("Restart now"))) android_call("restartApp");
-            }
-        }
-    }
-    ImGui::Spacing();
-    ImGui::Spacing();
-    heading("Frame generation (Lossless Scaling)");
-    {   // (S23: the file is the player's own and stays on the phone: BOTWRecompAndroidActivity.importLossless)
-        bool have = fg_dll_present();
-        ImGui::Text("%s", tr(have ? "Lossless.dll: imported" : "Lossless.dll: not imported"));
-        ImGui::PushTextWrapPos(0);
-        ImGui::TextDisabled("%s", tr("Generated frames between the real ones (the switch is in the Video tab). It needs the "
-                                     "Lossless.dll of your own copy of Lossless Scaling, from its Steam folder. The file "
-                                     "stays on this phone and is never part of the app."));
-        if (*fg_status()) ImGui::TextColored(ImVec4(1.0f, 0.62f, 0.3f, 1.0f), tr("Frame generation stopped: %s"), fg_status());
-        ImGui::PopTextWrapPos();
-        if (ImGui::Button(tr("Choose Lossless.dll"))) android_call("pickLossless");
-        if (have) {
-            ImGui::SameLine();
-            if (ImGui::Button(tr("Remove Lossless.dll"))) android_call("removeLossless");
-        }
-        pthread_mutex_lock(&g_lock);
-        std::string msg = g_fg_msg;
-        bool restart = g_fg_restart;
-        pthread_mutex_unlock(&g_lock);
-        if (!msg.empty()) {
-            ImGui::Text("%s", msg.c_str());
-            if (restart) {
-                ImGui::SameLine();
-                ImGui::PushID("fg");
-                if (ImGui::Button(tr("Restart now"))) android_call("restartApp");
-                ImGui::PopID();
             }
         }
     }

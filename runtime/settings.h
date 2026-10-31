@@ -45,8 +45,6 @@ typedef struct {
     bool native_code;     // Android: the game's own code on the CPU, no build of it (runtime/native.c); off by default
     bool files_in_place;  // Android: a setup reads the picked romfs/ where it is, no copy (services/fs.c); off by default
     bool sync_lag;        // Android: the game's next frame overlaps the GPU's last (nvn/objects.c nvnSyncWait); on by default
-    int framegen;         // (S23) generated frames per real one: 0 off, 1 2x, 2 3x (vulkan/framegen.c; needs a Lossless.dll)
-    int framegen_model;   // 0 light, 1 quality
     int ui_size;          // (S23) the settings pages' text and rows: 0 normal, 1 large, 2 extra large (ui/menu.mm)
     // (S23) Settings > Files > Tests, all off by default
     bool gpu_turbo;       // the GPU doesn't rest while the app is in front (vulkan/android_driver.c vk_gpu_turbo)

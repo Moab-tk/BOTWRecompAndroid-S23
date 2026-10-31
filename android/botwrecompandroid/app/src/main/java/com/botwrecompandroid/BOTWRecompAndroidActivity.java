@@ -77,13 +77,11 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
     private static native boolean nativeCheckRomfs(int version, String[] paths, String versionTxt);
     private static native void nativeDriverPicked(String name);
     private static native void nativeGpuTurbo(boolean front);
-    private static native void nativeLosslessPicked(int result);
     private static native void nativeModImportDone(String message);
     private static native void nativeLogFolderPicked(String name);
 
     private static native String nativeSaveDir();  // (this version's save_0, absolute)
     private static native void nativeSaveDone(int result, String detail);
-    private static final int REQ_LOSSLESS = 0x4c60;  // (S23)
     private static final int REQ_GAME = 0x4c41, REQ_DRIVER = 0x4c42, REQ_MOD = 0x4c46, REQ_LOG = 0x4c47,
             REQ_DRIVER_RECOVER = 0x4c48, REQ_SAVE_IN = 0x4c49, REQ_SAVE_OUT = 0x4c4a, REQ_SAVE_IN_TREE = 0x4c4c,
             REQ_DLC = 0x4c4d;
@@ -119,7 +117,10 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
             // testing: the runtime's LARECOMP_* switches from the launch intent, separated by commas (adb shell drops
             // the quotes around spaces), e.g. LARECOMP_VK_DRIVER= is the system driver:
             // adb shell am start -n com.botwrecomp.android/com.botwrecompandroid.BOTWRecompAndroidActivity --es env LARECOMP_NO_LAUNCHER=1,LARECOMP_VK_DRIVER=
-            String env = getIntent() != null ? getIntent().getStringExtra("env") : null;
+            // (S23) only with the file testes.txt in the app's folder, which adb can make and other apps can't: these
+            // switches name libraries to load, and this activity is open to every app on the phone
+            boolean tests = new File(getExternalFilesDir(null), "testes.txt").exists();
+            String env = tests && getIntent() != null ? getIntent().getStringExtra("env") : null;
             // Opened again from the recent apps, Android hands back that test launch's intent: keep only which game
             // version it ran (a scripted input left in it ignored the touch screen - the menu looked frozen)
             boolean recents = getIntent() != null && (getIntent().getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0;
@@ -331,48 +332,6 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
         });
     }
 
-    // (S23) The player's own Lossless.dll, for frame generation (vulkan/framegen.c): picked as a driver is, copied into
-    // the app's private files. It never comes with the app, and leaves with its data.
-    public static void pickLossless() {
-        self.runOnUiThread(() -> {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            i.addCategory(Intent.CATEGORY_OPENABLE);
-            i.setType("*/*");
-            try {
-                self.startActivityForResult(i, REQ_LOSSLESS);
-            } catch (Exception e) {
-                Log.e(TAG, "file picker: " + e);
-            }
-        });
-    }
-
-    public static void removeLossless() {
-        new Thread(() -> {
-            deleteTree(new File(self.getFilesDir(), "lossless"));
-            nativeLosslessPicked(2);
-        }, "lossless").start();
-    }
-
-    private void importLossless(Uri f) {
-        File dir = new File(getFilesDir(), "lossless"), tmp = new File(dir, "Lossless.tmp");
-        int result = 1;
-        try {
-            dir.mkdirs();
-            try (InputStream in = getContentResolver().openInputStream(f)) {
-                copy(in, tmp);
-            }
-            byte[] head = new byte[2];
-            try (InputStream in = new FileInputStream(tmp)) {
-                if (in.read(head) == 2 && head[0] == 'M' && head[1] == 'Z' && tmp.length() > 1 << 20 && tmp.length() < 1L << 26 &&
-                    tmp.renameTo(new File(dir, "Lossless.dll"))) result = 0;
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "lossless: " + e);
-        }
-        tmp.delete();
-        nativeLosslessPicked(result);
-    }
-
     // Back to the system's Vulkan driver: the chosen package and its unpacked copy go (from the next start on)
     public static void useSystemDriver() {
         new Thread(() -> {
@@ -435,11 +394,6 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
         if (req == REQ_DRIVER) {
             Uri f = result == Activity.RESULT_OK && data != null ? data.getData() : null;
             if (f != null) new Thread(() -> importDriver(f), "driver").start();
-            return;
-        }
-        if (req == REQ_LOSSLESS) {
-            Uri f = result == Activity.RESULT_OK && data != null ? data.getData() : null;
-            if (f != null) new Thread(() -> importLossless(f), "lossless").start();
             return;
         }
         if (req == REQ_DRIVER_RECOVER) {
