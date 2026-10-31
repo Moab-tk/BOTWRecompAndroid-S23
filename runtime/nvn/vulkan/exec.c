@@ -1280,8 +1280,8 @@ static void workers_nice(int nice) {  // (one already on the job, on a slow core
     }
 }
 #endif
-static void wait_built(_Atomic int *state, void *arg) {
-    if (atomic_load(state)) return;
+static uint64_t wait_built(_Atomic int *state, void *arg) {
+    if (atomic_load(state)) return 0;
     uint64_t t0 = plat_now_ns();
 #ifdef __ANDROID__
     workers_nice(0);
@@ -1295,7 +1295,9 @@ static void wait_built(_Atomic int *state, void *arg) {
 #ifdef __ANDROID__
     workers_nice(10);
 #endif
-    stat_build_wait_ns += plat_now_ns() - t0;
+    uint64_t waited = plat_now_ns() - t0;
+    stat_build_wait_ns += waited;
+    return waited;
 }
 static bool rt_is_persistent(NvnTexture *t) {
     static int on = -1;
@@ -5595,6 +5597,16 @@ static bool topology(uint32_t mode, VkPrimitiveTopology *t, uint8_t *cls) {
 static void draw_(CmdRec *r, bool indexed);
 // (diagnosis: dark frames) the first skipped draws into a large target - which passes still skip while their shaders
 // build: their target's size and whether it has depth
+// (S23, measuring) one wait of a draw for its shader, long enough to be felt: which draw, and why it waited
+static void wait_note(uint64_t ns, const char *what, bool once) {
+    static int n;
+    if (ns < 30000000 || n >= 200) return;
+    n++;
+    NvnTexture *t = st.rt.ncolor ? st.rt.color[0] : st.rt.depth;
+    LOG("[vk] long wait: %.0f ms, %s, into %ux%u levels %u target %u, %d color%s%s%s\n", ns / 1e6, what, t ? t->width : 0, t ? t->height : 0,
+        t ? t->levels : 0, t ? t->target : 0, st.rt.ncolor, st.rt.depth ? ", depth" : ", no depth", t && rt_is_persistent(t) ? ", kept" : "",
+        once ? ", now and then" : "");
+}
 static void skip_note(const char *what) {
     static int n;
     NvnTexture *t = st.rt.ncolor ? st.rt.color[0] : st.rt.depth;
@@ -5712,11 +5724,12 @@ static void draw_(CmdRec *r, bool indexed) {
 #endif
     Prog *pr = get_program(st.program, &vkey, &fkey);
     bool keep = false;  // (a target built once and kept: wait for the shader and pipeline - wait_built)
+    bool keep_once = false;
     {   // (the same targets as the previous draw, same frame: their answer again - reading 6 texture objects a draw
         // showed up)
         static NvnTexture *kc[8], *kd;
         static int kn = -1;
-        static bool kkeep;
+        static bool kkeep, konce;
         static uint64_t kframe = ~0ull;
         uint64_t frame = renderer_present_count();
         if (kn != st.rt.ncolor || memcmp(kc, st.rt.color, sizeof kc) || kd != st.rt.depth || kframe != frame) {
@@ -5725,14 +5738,17 @@ static void draw_(CmdRec *r, bool indexed) {
             kd = st.rt.depth;
             kframe = frame;
             kkeep = !st.rt.depth && st.rt.ncolor && wait_no_depth();
+            konce = false;
             for (int i = 0; i < st.rt.ncolor; i++) {  // (every target: rt_one_off records each one's frame)
                 bool once = rt_one_off(st.rt.color[i], frame);
+                konce |= once;
                 kkeep |= rt_is_persistent(st.rt.color[i]) | (once && !st.rt.depth);
             }
         }
         keep = kkeep;
+        keep_once = konce;
     }
-    if (pr && keep) wait_built(&pr->state, pr);
+    if (pr && keep) wait_note(wait_built(&pr->state, pr), "shader", keep_once);
     if (!pr || atomic_load(&pr->state) != 1) { stat_skipped++; skip_note("shader"); return; }
     {   // fragment-shader hash: interior backdrop detection (widescreen), skip lists, item twinkle (renderer.m)
         static uint64_t last_fs, last_hash;
@@ -6177,7 +6193,7 @@ static void draw_(CmdRec *r, bool indexed) {
         last_pipeline = pp;
         pipeline_dirty = false;
     }
-    if (keep) wait_built(&pp->state, pp);
+    if (keep) wait_note(wait_built(&pp->state, pp), "pipeline", keep_once);
     if (atomic_load(&pp->state) != 1) {
         if (g_debug_frame) LOG("[draw]   skipped: pipeline %s\n", atomic_load(&pp->state) ? "failed" : "still building");
         stat_skipped++;
