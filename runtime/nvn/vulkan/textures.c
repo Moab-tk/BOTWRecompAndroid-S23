@@ -759,11 +759,22 @@ static void texture_trace_record(int kind, uint64_t source, uint64_t upload, uin
     }
     since = now;
 }
+// (S23) With no page write tracking (the heap as GPU memory: every check by samples), a texture that never changed yet
+// is looked at one frame in eight, 1 KB of it. The terrain's height tiles (flag 0x40) go once into the height array
+// kept for the region, so a tile seen old at that moment stays old there: the likely way to the "curtains", which
+// LARECOMP_TEX_FULLHASH=1 took away (2026-10-26). Those tiles, and only them: every frame, whole.
+// LARECOMP_TEX_TILES=0: as before.
+static bool texture_always_checked(const NvnTexture *t) {
+    static int on = -1;
+    if (on < 0) on = !getenv("LARECOMP_TEX_TILES") || atoi(getenv("LARECOMP_TEX_TILES"));
+    return on && (t->flags & 0x40);
+}
 static void upload_texture(NvnTexture *t, TexBackend *b) {
     if (!t->addr || t->target == 10) return;
     uint64_t frame = vk_frame_counter();
     if (b->uploaded && b->checked_frame == frame) return;
-    if (b->uploaded && !b->dynamic && ((frame + ((uintptr_t)b >> 6)) & 7)) return;
+    bool always = texture_always_checked(t);
+    if (b->uploaded && !b->dynamic && !always && ((frame + ((uintptr_t)b >> 6)) & 7)) return;
     const FormatInfo *fi = t->layout.fmt;
     if (!fi || !fi->bpb) return;
     VkFmt mf = fmt_of(t->format);
@@ -775,7 +786,7 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
     const uint8_t *mem = (const uint8_t *)(uintptr_t)t->addr;
     static int always_full = -1;
     if (always_full < 0) always_full = getenv("LARECOMP_TEX_FULLHASH") ? 1 : 0;
-    bool full = b->dynamic || !b->uploaded || always_full;
+    bool full = b->dynamic || !b->uploaded || always_full || always;
     bool periodic = frame - b->full_frame >= 120 && full_hash_budget >= total;  // (safety net: a full hash now and then)
     if (!full && periodic) { full = true; full_hash_budget -= total; }
     if (!b->tp) b->tp = texpatch_identify(t) + 1;  // (button prompts / Hero Mode icon: re-uploaded when their look changes)

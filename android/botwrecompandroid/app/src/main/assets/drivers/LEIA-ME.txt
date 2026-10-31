@@ -1,0 +1,4 @@
+Mesa Turnip, builds of https://github.com/The412Banner/Banners-Turnip
+release v27.0.0-20261025-r5, Mesa commit ab1502f. Mesa is under the MIT license and others: https://docs.mesa3d.org/license.html
+sha256 1190b310dbe32a669f4c2239d62a57f58c4452255162d144bb36f2758d0d0221  Turnip-v27.0.0-20261025-r5.zip
+sha256 688023aa3764e02e4945da4f168558ffd2e8ea59d4d37a23784deea2cb705a83  Turnip-v27.0.0-20261025-r5-8G2-OneUI.zip

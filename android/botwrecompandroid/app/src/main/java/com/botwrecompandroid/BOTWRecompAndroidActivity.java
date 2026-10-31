@@ -108,6 +108,8 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
             setenv("LARECOMP_NATIVE_LIB_DIR", getApplicationInfo().nativeLibraryDir);
             setenv("LARECOMP_LAST_EXIT", lastExit());
             setenv("LARECOMP_DRIVERS_DIR", new File(getExternalFilesDir(null), "drivers").getPath());
+            setenv("LARECOMP_DEVICE_BRAND", android.os.Build.MANUFACTURER);
+            offerDrivers();
             File gen = new File(getFilesDir(), "gen");
             unpackGen(gen);
             setenv("LARECOMP_GEN_DIR", gen.getAbsolutePath());
@@ -1262,6 +1264,48 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
     // The first driver in <external files>/drivers, in internal storage (copied again only when it changed). A zip's
     // library is the one its meta.json names (adrenotools' libraryName: packages with support libraries beside it, as
     // RADV-Xclipse's), else one named like a Vulkan driver, else its only / last .so.
+    // (S23) The packages the app comes with (assets/drivers) join the list on Qualcomm phones, once: one the player
+    // deletes stays deleted. Offered, not chosen: whatever ran before keeps running.
+    private void offerDrivers() throws IOException {
+        boolean qualcomm = android.os.Build.HARDWARE.toLowerCase().startsWith("qcom")
+                || (android.os.Build.VERSION.SDK_INT >= 31 && "QTI".equals(android.os.Build.SOC_MANUFACTURER));
+        String[] names = getAssets().list("drivers");
+        if (!qualcomm || names == null) return;
+        File dir = new File(getExternalFilesDir(null), "drivers");
+        dir.mkdirs();
+        File mark = new File(dir, "offered.txt");
+        String offered = mark.exists() ? readSmall(mark) : "";
+        File active = new File(dir, "active.txt");
+        boolean changed = false;
+        for (String n : names) {
+            if (!DRIVER_FILE.matcher(n).find() || offered.contains(n + "\n")) continue;
+            if (!active.exists()) {  // (nothing picked meant "the first one": the same driver as before, now by name)
+                File[] had = dir.listFiles((d, x) -> DRIVER_FILE.matcher(x).find());
+                String keep = "-";
+                if (had != null && had.length > 0) {
+                    Arrays.sort(had);
+                    keep = had[0].getName();
+                }
+                try (OutputStream o = new FileOutputStream(active)) {
+                    o.write(keep.getBytes());
+                }
+            }
+            File dst = new File(dir, n);
+            if (!dst.exists()) {
+                File tmp = new File(dir, n + ".part");
+                try (InputStream in = getAssets().open("drivers/" + n)) {
+                    copy(in, tmp);
+                }
+                if (!tmp.renameTo(dst)) throw new IOException("driver: " + n);
+            }
+            offered += n + "\n";
+            changed = true;
+        }
+        if (changed) try (OutputStream o = new FileOutputStream(mark)) {
+            o.write(offered.getBytes());
+        }
+    }
+
     private File customDriver() throws IOException {
         File src = new File(getExternalFilesDir(null), "drivers");
         src.mkdirs();

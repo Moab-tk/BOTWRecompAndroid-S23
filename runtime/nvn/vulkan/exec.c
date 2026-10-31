@@ -4695,7 +4695,6 @@ static void gres_reset(void) {
     ga_nres = 0;
     ga_res_top = 0;
     ga_head = GA_RES;
-    ga_ndirty = 0;
     gl_n = 0;
     memset(ga_seg_seq, 0, sizeof ga_seg_seq);
 }

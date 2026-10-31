@@ -1471,6 +1471,11 @@ static std::string driver_shown(const std::string &file) {  // (the package's na
     size_t dot = file.rfind('.');
     return dot == std::string::npos ? file : file.substr(0, dot);
 }
+static std::string driver_recommended() {  // the package for this phone, "" none: the Adreno 740's two (assets/drivers)
+    const char *gpu = vk_gpu_name(), *brand = getenv("LARECOMP_DEVICE_BRAND");
+    if (!gpu || !strstr(gpu, "740")) return "";
+    return brand && !strcasecmp(brand, "samsung") ? "Turnip-v27.0.0-20261025-r5-8G2-OneUI.zip" : "Turnip-v27.0.0-20261025-r5.zip";
+}
 static void note_row(const std::string &msg, bool failed = false) {  // a line under the rows
     if (msg.empty()) return;
     ImGui::Dummy(ImVec2(0, 6));
@@ -1515,9 +1520,17 @@ static void prelaunch_rows(float sc) {
             g_driver_msg.clear(), g_driver_restart = false;  // (the last pick's message)
             pthread_mutex_unlock(&g_lock);
         };
+        const std::string recommended = driver_recommended();
         for (const std::string &f : files) {
             std::string desc = driver_shown(f) == in_use ? std::string(tr("In use now.")) + "\n\n" + vk_driver_desc() : std::string(tr(about));
-            if (opt_radio(driver_shown(f).c_str(), f == active, desc.c_str())) pick(f);
+            // (S23) the two the app comes with: which phones each one is for
+            if (f == "Turnip-v27.0.0-20261025-r5-8G2-OneUI.zip")
+                desc = std::string(tr("For the Snapdragon 8 Gen 2 with Samsung's One UI, as the Galaxy S23. On other phones it can make the screen flicker.")) + "\n\n" + desc;
+            else if (f == "Turnip-v27.0.0-20261025-r5.zip")
+                desc = std::string(tr("For the Snapdragon 8 Gen 2 and other Adreno 6xx and 7xx GPUs. If the screen flickers on a Galaxy S23, use the One UI one.")) + "\n\n" + desc;
+            std::string label = driver_shown(f);
+            if (f == recommended) label += std::string(" - ") + tr("Recommended");
+            if (opt_radio(label.c_str(), f == active, desc.c_str())) pick(f);
         }
         if (opt_radio("Use the system driver", active == "-" || active.empty(), about)) pick("-");
         if (opt_button("Add driver", "A Turnip package (.zip) from your files. It joins this list and is chosen; the others are kept."))
@@ -1745,7 +1758,7 @@ static void prelaunch_rows(float sc) {
         opt_action("Other projects", "",
                    "SavageWindRecomp, by Revivedx. LASRecomp-Android-Plus, by Nycolazs. The zeldaret/botw decompilation and "
                    "open-ead/sead. AMD FSR 1, Snapdragon GSR and SMAA. Bloodframe, by Cid (ducvd89), on top of lsfg-vk. "
-                   "libadrenotools. Mesa's Turnip driver.");
+                   "libadrenotools. Mesa's Turnip driver, in The412Banner's builds.");
         opt_action("About this version", "Unofficial",
                    "An unofficial modification for the Samsung Galaxy S23, made with AI from one person's ideas. It isn't made "
                    "or supported by the original authors, so please don't take its problems to them. Don't take it too "
@@ -1765,6 +1778,31 @@ struct SettingBlock {
     std::string name, when, driver;
 };
 static SettingBlock g_blocks[SETTING_BLOCKS];
+// (S23) The start screen's recommended settings: what played well on the Galaxy S23 Ultra, with the driver for the phone.
+// Only these: the display, the sound, the controls and the mods stay as the player has them. Restarts the app, as a block.
+static bool g_rec_ask;
+static void recommended_apply() {
+    g_settings.fps_mode = 1;  // (30)
+    g_settings.event_fps_unlock = true;
+    g_settings.res_mode = 1;
+    g_settings.out_lines = 900;
+    g_settings.upscaler = UPSCALE_SHARP;
+    g_settings.antialias = AA_OFF;
+    g_settings.shader_int32 = true;
+    g_settings.sync_lag = true;
+    g_settings.native_code = true;
+    g_settings.gpu_heap = g_settings.inplace_reads = g_settings.turnip_lrz = 1;
+    g_settings.framegen = 0;
+    g_settings.gpu_turbo = false;
+    g_settings.present_fifo = true;
+    g_settings.shader_workers = 0;
+    g_settings.force_aniso = 0;
+    g_settings.turnip_mode = 0;
+    settings_save();
+    std::string d = driver_recommended();
+    if (!d.empty() && access((drivers_dir() + "/" + d).c_str(), F_OK) == 0) driver_set_active(d);
+    android_call("restartApp");
+}
 static int g_block_open = -1, g_block_ask;  // the block open (-1: the list); 1 replace it? 2 load it? 3 delete it?
 static char g_block_name[48];
 static std::string g_block_msg;
@@ -1838,6 +1876,16 @@ static void block_close() {
 static void blocks_rows(float sc) {
     opt_begin("##blocks", sc);
     if (g_block_open < 0) {
+        opt_section("Recommended");
+        const char *rec = "The settings tested on the Galaxy S23 Ultra, with the driver for this phone: 30 fps, 1x resolution, 900 lines, "
+                          "FSR 1 and native game code. Your screen shape, sound, controls, mods and game saves stay as they are. On "
+                          "another phone the result may differ.";
+        if (!g_rec_ask) {
+            if (opt_action("Use the recommended settings", "S23 Ultra", rec, false)) g_rec_ask = true;
+        } else {
+            if (opt_button("Yes, apply and restart", rec)) recommended_apply();
+            if (opt_button("Cancel", "Keeps everything as it is.")) g_rec_ask = false;
+        }
         opt_section("Saved settings");
         for (int i = 0; i < SETTING_BLOCKS; i++) {
             const SettingBlock &b = g_blocks[i];
@@ -1904,6 +1952,7 @@ static void blocks_rows(float sc) {
 }
 // one step back: from the question, from the block, and true when already on the list
 static bool blocks_back() {
+    if (g_rec_ask) { g_rec_ask = false; return false; }
     if (g_block_ask) g_block_ask = 0;
     else if (g_block_open >= 0) block_close();
     else return true;
@@ -2583,6 +2632,7 @@ extern "C" void launcher_run(const char *root) {
                     if (menu_item("SAVED SETTINGS", true)) {
                         blocks_read();
                         g_block_open = -1, g_block_ask = 0, g_block_msg.clear();
+                        g_rec_ask = false;
                         opt_focus_first(true);
                         page = BLOCKS;
                     }
