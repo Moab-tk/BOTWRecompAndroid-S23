@@ -59,6 +59,7 @@ Settings g_settings = {
     .upscaler = UPSCALE_SGSR1,  // (one pass: ~1 ms on the Adreno 830 to 2560x1440, FSR 1's two ~2.7 ms; 40 fps against 38)
     .native_code = false,       // (an experiment: runtime/native.c)
     .sync_lag = true,           // (a few more fps; the CPU's reads of GPU results a frame old: nvn/objects.c nvnSyncWait)
+    .panel_lock = true,         // (S23: vulkan/device.c steady_frames)
     .out_lines = OUT_AUTO,      // (POCO F7 Ultra, 3200x1440, 1.8.2's Great Plateau: GPU 22.8 ms a frame at the screen's,
                                 // 18.6 at 1080 lines with a larger scene - the final image's passes over 2.2x the pixels)
 #else
@@ -206,6 +207,7 @@ void settings_reset_defaults(void) {
     g_settings.ui_size = d->ui_size;
     g_settings.gpu_turbo = d->gpu_turbo;
     g_settings.present_fifo = d->present_fifo;
+    g_settings.panel_lock = d->panel_lock;
     g_settings.shader_workers = d->shader_workers;
     g_settings.force_aniso = d->force_aniso;
     g_settings.turnip_mode = d->turnip_mode;
@@ -256,6 +258,7 @@ void settings_load(void) {
         else if (!strcmp(key, "ui_size")) g_settings.ui_size = atoi(val) < 0 ? 0 : atoi(val) > 2 ? 2 : atoi(val);
         else if (!strcmp(key, "gpu_turbo")) g_settings.gpu_turbo = atoi(val) != 0;
         else if (!strcmp(key, "present_fifo")) g_settings.present_fifo = atoi(val) != 0;
+        else if (!strcmp(key, "panel_lock")) g_settings.panel_lock = atoi(val) != 0;
         else if (!strcmp(key, "shader_workers")) g_settings.shader_workers = atoi(val) < 0 ? 0 : atoi(val) > 6 ? 6 : atoi(val);
         else if (!strcmp(key, "force_aniso")) g_settings.force_aniso = atoi(val) < 0 ? 0 : atoi(val) > 5 ? 5 : atoi(val);
         else if (!strcmp(key, "turnip_mode")) g_settings.turnip_mode = atoi(val) < 0 ? 0 : atoi(val) > 3 ? 3 : atoi(val);
@@ -363,8 +366,8 @@ void settings_save(void) {
     fprintf(f, "shader_int32 = %d\nsync_lag = %d\nnative_code = %d\nfiles_in_place = %d\n", g_settings.shader_int32,
             g_settings.sync_lag, g_settings.native_code, g_settings.files_in_place);
     fprintf(f, "ui_size = %d\n", g_settings.ui_size);
-    fprintf(f, "gpu_turbo = %d\npresent_fifo = %d\nshader_workers = %d\nforce_aniso = %d\nturnip_mode = %d\n", g_settings.gpu_turbo,
-            g_settings.present_fifo, g_settings.shader_workers, g_settings.force_aniso, g_settings.turnip_mode);
+    fprintf(f, "gpu_turbo = %d\npresent_fifo = %d\npanel_lock = %d\nshader_workers = %d\nforce_aniso = %d\nturnip_mode = %d\n", g_settings.gpu_turbo,
+            g_settings.present_fifo, g_settings.panel_lock, g_settings.shader_workers, g_settings.force_aniso, g_settings.turnip_mode);
     static const char *const tri[] = {"auto", "0", "1"};  // (-1 / 0 / 1)
 #define TRI(v) tri[(v) < 0 ? 0 : (v) ? 2 : 1]
     fprintf(f, "gpu_heap = %s\ninplace_reads = %s\nturnip_lrz = %s\nlog_file = %d\ngpu_model = %s\n", TRI(g_settings.gpu_heap),

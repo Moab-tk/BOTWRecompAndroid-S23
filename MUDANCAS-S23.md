@@ -9,7 +9,8 @@ cada etapa está no histórico do repositório.
 |---|---|
 | Compilação | Feita para o Snapdragon 8 Gen 2, sem SVE, com NDK r30 e CMake 3.30.4 |
 | Pacote | `com.botwrecomp.android.s23`, chave própria, nome BOTW S23 |
-| Ritmo de quadros | Hora marcada para mostrar cada quadro e atraso de meio quadro |
+| Ritmo de quadros | Hora marcada para mostrar cada quadro, seguindo o ritmo real da tela a 30 FPS |
+| Som | Novas tentativas quando o canal de som falha ao iniciar |
 | Shaders | Fila de trabalho atrás do jogo, quem espera faz a tarefa, tabelas maiores |
 | Texturas | Alturas do terreno conferidas por inteiro a cada quadro |
 | Interface | Tamanho do texto, letreiro, cartões, interruptores, um toque para mudar valores |
@@ -94,6 +95,23 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - As chaves de teste passadas ao abrir o app agora exigem o arquivo `testes.txt` na pasta do app. O adb consegue
   criá-lo e outros aplicativos não. Antes, qualquer aplicativo do celular podia usar essas chaves, e algumas indicam
   bibliotecas a carregar.
+
+### b8: ritmo na tela e som
+
+**Ritmo**
+
+- Sozinho, o Android deixava a tela em 30 Hz com o jogo a 30 FPS. Um quadro que perdia a atualização esperava 33 ms, e o
+  seguinte passava por cima dele: cerca de 1 descartado por segundo, com o contador marcando 30.
+- A tela agora fica em 60 Hz.
+- O relógio do jogo e o da tela andam em velocidades um pouco diferentes (16,67 e 16,66 ms por atualização). Cada quadro
+  passa a seguir o ritmo real da tela, medido pelo próprio sistema.
+- Vem ligado, com o nome **Quadros regulares a 30 FPS**, em Configurações > Arquivos. Deixa os comandos um pouco mais
+  atrasados, porque cada quadro é mostrado com 50 ms de folga.
+
+**Som**
+
+- Na primeira abertura depois de instalar, o canal de som de baixa latência podia abrir e falhar ao iniciar, e uma só
+  tentativa deixava a sessão muda. Agora são 3 tentativas e depois mais 3 sem baixa latência.
 
 ## O que não foi modificado
 

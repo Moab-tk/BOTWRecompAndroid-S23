@@ -1057,20 +1057,28 @@ static void android_create_surface(struct ANativeWindow *aw) {
 // LARECOMP_PANEL_HZ=<n>: the screen's refresh asked for instead. Left alone at 30 fps Android runs the panel at 30 Hz,
 // where a frame that misses a refresh waits a whole 33 ms and the next one replaces it.
 #include <android/native_window.h>
+extern int framepace_target(void);
+
+// (S23) Settings > Files > Steady frames at 30 FPS: the panel at 60 Hz, frames held to its refreshes (present_lock).
+// Galaxy S23 Ultra, 5 minutes playing: frames shown on time 96% (the screen left alone: 93%, with one dropped a second)
+static bool steady_frames(void) {
+    return g_settings.panel_lock && framepace_target() == 30;
+}
+
 static void android_set_frame_rate(void) {
     static int on = -1, panel = -1;
     if (on < 0) on = getenv("LARECOMP_SET_FRAME_RATE") && atoi(getenv("LARECOMP_SET_FRAME_RATE"));
     if (panel < 0) panel = getenv("LARECOMP_PANEL_HZ") ? atoi(getenv("LARECOMP_PANEL_HZ")) : 0;
-    if ((!on && panel <= 0) || !surface_aw || android_window() != surface_aw) return;  // (the window it was made for, still alive)
-    extern int framepace_target(void);
+    int hz = panel > 0 ? panel : steady_frames() ? 60 : 0;
+    if ((!on && hz <= 0) || !surface_aw || android_window() != surface_aw) return;  // (the window it was made for, still alive)
     static struct ANativeWindow *set_aw;
     static int set_fps = -1;
-    int fps = panel > 0 ? panel : framepace_target();
+    int fps = hz > 0 ? hz : framepace_target();
     if (surface_aw == set_aw && fps == set_fps) return;
     set_aw = surface_aw, set_fps = fps;
     int r = ANativeWindow_setFrameRate(surface_aw, fps > 0 ? (float)fps : 0.0f,
-                                       panel > 0 ? ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT
-                                                 : ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+                                       hz > 0 ? ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT
+                                              : ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
     LOG("[vk] window frame rate %d fps told to Android (%d)\n", fps, r);
 }
 
@@ -1250,12 +1258,12 @@ static void save_window_image(VkCommandBuffer cb, VkSpan *out) {
 #ifdef __ANDROID__
 // (S23) How long after its grid time a frame goes out: room for the GPU to finish it. Half a period by default (a whole
 // one adds its 33 ms to every button press); a frame that takes longer shows when ready, as without this.
-// LARECOMP_PRESENT_DELAY_MS=<ms>.
+// LARECOMP_PRESENT_DELAY_MS=<ms>. Steady frames: 50 ms, what a frame needs to be ready on the refresh it's held to.
 static uint64_t present_delay_ns(void) {
     extern uint64_t framepace_period_ns(void);
     static long long ms10 = -1;
     if (ms10 < 0) ms10 = getenv("LARECOMP_PRESENT_DELAY_MS") ? (long long)(atof(getenv("LARECOMP_PRESENT_DELAY_MS")) * 10) : 0;
-    return ms10 > 0 ? (uint64_t)ms10 * 100000ull : framepace_period_ns() / 2;
+    return ms10 > 0 ? (uint64_t)ms10 * 100000ull : steady_frames() ? 50000000ull : framepace_period_ns() / 2;
 }
 
 static uint64_t g_frame_grid;  // the frame being presented (render thread): vk_present_set_grid
@@ -1263,15 +1271,15 @@ void vk_present_set_grid(uint64_t grid) { g_frame_grid = grid; }
 
 static uint32_t g_present_id;
 
-// (S23) LARECOMP_PRESENT_LOCK=1: the time asked for follows the screen's own refreshes. The pace's grid and the panel run
+// (S23) Steady frames (LARECOMP_PRESENT_LOCK=0/1 over it): the time asked for follows the screen's own refreshes. The pace's grid and the panel run
 // on two clocks, so the grid slides over the refreshes (0.4 ms a second measured at 60 Hz); near the edge of one, frames
 // fell on either side of it and went out at 16.7 / 50 ms, with 30 ms to spare. Here each frame takes the refreshes after
 // the last one's, and only goes back to the grid when over a refresh away from it. It asks for half a refresh before the
 // one it wants: the middle of the window that shows on that refresh.
 static uint64_t present_lock(uint64_t want) {
-    static int on = -1;
-    if (on < 0) on = getenv("LARECOMP_PRESENT_LOCK") && atoi(getenv("LARECOMP_PRESENT_LOCK"));
-    if (!on) return want;
+    static int env = -2;
+    if (env == -2) env = getenv("LARECOMP_PRESENT_LOCK") ? atoi(getenv("LARECOMP_PRESENT_LOCK")) != 0 : -1;
+    if (env >= 0 ? !env : !steady_frames()) return want;
     extern uint64_t framepace_period_ns(void);
     static uint64_t anchor, target, refresh;
     static uint32_t n, cuts;

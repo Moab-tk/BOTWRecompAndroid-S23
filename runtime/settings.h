@@ -49,6 +49,7 @@ typedef struct {
     // (S23) Settings > Files > Tests, all off by default
     bool gpu_turbo;       // the GPU doesn't rest while the app is in front (vulkan/android_driver.c vk_gpu_turbo)
     bool present_fifo;    // FIFO instead of MAILBOX (vulkan/device.c present_mode); read when the app starts
+    bool panel_lock;      // at 30 FPS: the panel at 60 Hz, frames held to its refreshes (vulkan/device.c); on by default
     int shader_workers;   // threads building shaders, 0 automatic (vulkan/exec.c)
     int force_aniso;      // 0 the game's, 1-5: 1x, 2x, 4x, 8x, 16x (vulkan/textures.c)
     int turnip_mode;      // TU_DEBUG: 0 none, 1 gmem, 2 sysmem, 3 noubwc; read when the app starts (vulkan/device.c)

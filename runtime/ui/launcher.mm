@@ -1675,6 +1675,10 @@ static void prelaunch_rows(float sc) {
         if (opt_action(folder.empty() ? "Choose folder" : "Change folder", folder.c_str(), log_about)) android_call("pickLogFolder");
     }
 
+    changed |= opt_toggle("Steady frames at 30 FPS", &g_settings.panel_lock, true,
+                          "Keeps the screen at 60 Hz and shows each frame on the screen's own rhythm, so the game feels smoother "
+                          "at 30 FPS. It adds a little delay to the controls. Applies when the game starts.");
+
     opt_section("Tests (optional)");
     {   // (S23) from the look at Eden's options; all off by default, to compare one at a time
         if (opt_toggle("Keep the GPU awake", &g_settings.gpu_turbo, false,
@@ -1689,7 +1693,7 @@ static void prelaunch_rows(float sc) {
         if (opt_choice("Presentation mode", &fifo, present, 2, 0,
                        "How finished frames reach the screen. Mailbox: a newer frame replaces one still waiting. FIFO: every "
                        "frame is shown, in order - it may look smoother, but if the screen falls behind the game waits for it. "
-                       "Frame generation always uses FIFO. Applies when BOTWRecompAndroid restarts.")) {
+                       "Applies when BOTWRecompAndroid restarts.")) {
             g_settings.present_fifo = fifo != 0;
             changed = true;
         }
@@ -1760,6 +1764,7 @@ static void recommended_apply() {
     g_settings.gpu_heap = g_settings.inplace_reads = g_settings.turnip_lrz = 1;
     g_settings.gpu_turbo = false;
     g_settings.present_fifo = true;
+    g_settings.panel_lock = true;
     g_settings.shader_workers = 0;
     g_settings.force_aniso = 0;
     g_settings.turnip_mode = 0;

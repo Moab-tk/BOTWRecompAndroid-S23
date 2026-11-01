@@ -30,7 +30,8 @@ do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
 - **Configurações recomendadas com um toque**, as mesmas testadas no S23 Ultra.
 - **Configurações salvas:** 8 blocos para guardar tudo o que você ajustou e voltar quando um teste piorar.
 - **Interface maior e mais fácil de tocar:** escolha de tamanho do texto, nomes longos que deslizam, opções em cartões.
-- **Ritmo de quadros ajustado** para a tela de 120 Hz, com hora marcada para mostrar cada quadro.
+- **Quadros regulares a 30 FPS:** a tela fica em 60 Hz e cada quadro segue o ritmo real dela. Nas medições, 97% dos
+  quadros apareceram no tempo certo, sem nenhum descartado.
 - **Menos risco de travar em sessões longas**, com tabelas de shaders maiores. A lista completa está em
   [MUDANCAS-S23.md](MUDANCAS-S23.md).
 
@@ -59,6 +60,7 @@ Esses são os valores que o botão aplica:
 | Suavização | Desligada |
 | Código do jogo | Nativo |
 | Apresentação | FIFO |
+| Quadros regulares a 30 FPS | Ligado |
 | Compatibilidade do driver | Tudo ligado |
 | Driver | Turnip recomendado para o seu celular |
 
@@ -79,16 +81,28 @@ O de One UI pode fazer a tela piscar em celulares que não são Samsung. Em outr
 
 ## Desempenho medido
 
-Estes números são de um único aparelho e não são promessa. Nas duas partidas abaixo: S23 Ultra, jogo na versão 1.8.2,
-código nativo, 30 FPS, resolução 1x, saída 900. A primeira é da b6 e a segunda é de uma etapa anterior da b7; a b7
-final ainda não foi medida.
+Estes números são de um único aparelho e não são promessa. Nas partidas abaixo: S23 Ultra, jogo na versão 1.8.2, código
+nativo, 30 FPS, resolução 1x. Até a b7, a saída era de 900 linhas; na b8, de 1080, com a proporção original.
 
 | Medição | FPS médio | Medições abaixo de 29 FPS | Picos de 100 ms ou mais |
 |---|---:|---:|---:|
-| 10 minutos em lugares variados | 29,9 | 6 de 290 | 1 |
-| 11 minutos em áreas nunca visitadas | 29,9 | 5 de 341 | 5 |
+| b6: 10 minutos em lugares variados | 29,9 | 6 de 290 | 1 |
+| Etapa da b7: 11 minutos em áreas nunca visitadas | 29,9 | 5 de 341 | 5 |
+| b8: 4 minutos e meio | 29,9 | 6 de 120 | 4 |
 
-Cada medição cobre 2 segundos de jogo.
+Cada medição cobre 2 segundos de jogo. O FPS médio não conta tudo: ele mostra quantos quadros saíram, não se chegaram à
+tela no ritmo certo. Isto foi medido pelo próprio sistema, em cada quadro mostrado:
+
+| Na tela | b7 | b8 |
+|---|---:|---:|
+| Quadros no tempo certo | 93,3% | 97,2% |
+| Quadros descartados por segundo | 1,0 | 0 |
+| Quadros atrasados por segundo | 1,0 | 0,45 |
+| Variação do ritmo | 8,6 ms | 4,6 ms |
+
+**O que não funcionou:** 40 FPS (média de 36,8, com a GPU perdendo velocidade pelo calor, e 88 °C no processador) e a
+distância de visão reduzida do próprio jogo no mapa inteiro (3,5% menos desenhos, no mesmo lugar, sem mudar o uso da
+GPU).
 
 > [!WARNING]
 > Essas partidas foram feitas com **cooler no celular** e com o **limitador térmico do sistema desativado pelo dono do
@@ -99,9 +113,16 @@ Cada medição cobre 2 segundos de jogo.
 
 - **Paredes verticais no terreno ("cortinas"):** o chão pode virar paredes ou picos esticados, principalmente depois da
   cena de ativar uma Torre Sheikah. O defeito vem do projeto original e aparece com qualquer driver. Esta versão tem
-  uma tentativa de correção, ainda sem confirmação. Se acontecer, carregue um save feito depois.
+  uma tentativa de correção: nos testes da b8, o defeito não apareceu num lugar onde costumava aparecer, mas isso ainda
+  não é confirmação. Se acontecer, carregue um save feito depois.
 - **Engasgadas em áreas novas:** na primeira visita, um shader pode levar de 250 a 300 ms para ficar pronto. Depois ele
   fica guardado no celular, então as próximas visitas tendem a ser mais leves.
+- **GPU presa em frequência baixa:** em algumas partidas, o sistema baixou a GPU de 719 para cerca de 300 MHz e só soltou
+  com o jogo fechado, mesmo com o chip a 60 °C. Nas duas vezes medidas, a ferramenta que desativa o limitador não estava
+  rodando. Se o jogo ficar lento de repente, feche e abra.
+- **S23 e S23+ não foram testados.** Num celular de 12 GB, o jogo ocupou cerca de 5 GB de RAM. Desligar a memória da GPU
+  nas opções de compatibilidade economizou cerca de 1 GB numa medição curta, mas esquentou mais, ficou mais irregular e
+  o jogo fechou sozinho uma vez, com uma falha ainda sem causa conhecida.
 - **Testada em um celular só.** Em outro aparelho, tudo pode ser diferente.
 - **Proporção da tela:** há relato de defeito em tela cheia e em 16:9, ainda sem causa encontrada.
 - **Geração de quadros (Lossless Scaling):** foi testada e retirada, porque no S23 os quadros reais caíram para 15 a 23
