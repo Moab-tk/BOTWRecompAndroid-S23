@@ -1263,6 +1263,45 @@ void vk_present_set_grid(uint64_t grid) { g_frame_grid = grid; }
 
 static uint32_t g_present_id;
 
+// (S23) LARECOMP_PRESENT_LOCK=1: the time asked for follows the screen's own refreshes. The pace's grid and the panel run
+// on two clocks, so the grid slides over the refreshes (0.4 ms a second measured at 60 Hz); near the edge of one, frames
+// fell on either side of it and went out at 16.7 / 50 ms, with 30 ms to spare. Here each frame takes the refreshes after
+// the last one's, and only goes back to the grid when over a refresh away from it. It asks for half a refresh before the
+// one it wants: the middle of the window that shows on that refresh.
+static uint64_t present_lock(uint64_t want) {
+    static int on = -1;
+    if (on < 0) on = getenv("LARECOMP_PRESENT_LOCK") && atoi(getenv("LARECOMP_PRESENT_LOCK"));
+    if (!on) return want;
+    extern uint64_t framepace_period_ns(void);
+    static uint64_t anchor, target, refresh;
+    static uint32_t n, cuts;
+    if (!(n & 127)) {
+        VkRefreshCycleDurationGOOGLE d;
+        if (vkGetRefreshCycleDurationGOOGLE(g_vk.dev, g_vk.swapchain, &d) == VK_SUCCESS && d.refreshDuration) {
+            if (refresh != d.refreshDuration) LOG("[present] lock: a refresh is %.3f ms\n", d.refreshDuration / 1e6);
+            refresh = d.refreshDuration;
+        }
+    }
+    if (!(++n & 3)) {
+        VkPastPresentationTimingGOOGLE p[16];
+        uint32_t c = 16;
+        VkResult r = vkGetPastPresentationTimingGOOGLE(g_vk.dev, g_vk.swapchain, &c, p);
+        for (uint32_t i = 0; (r == VK_SUCCESS || r == VK_INCOMPLETE) && i < c; i++)
+            if (p[i].actualPresentTime > anchor) anchor = p[i].actualPresentTime;
+    }
+    if (!refresh || !anchor) return want;
+    uint64_t steps = (framepace_period_ns() + refresh / 2) / refresh, next = target + steps * refresh;
+    int64_t off = (int64_t)(next - want);
+    if (!target || off > (int64_t)refresh || off < -(int64_t)refresh) {
+        if (target && ++cuts <= 50) LOG("[present] lock: back to the grid (%u), %.1f ms away\n", cuts, off / 1e6);
+        next = want;
+    }
+    int64_t since = (int64_t)(next - anchor);
+    int64_t k = (since + (since < 0 ? -(int64_t)refresh / 2 : (int64_t)refresh / 2)) / (int64_t)refresh;
+    target = anchor + (uint64_t)(k * (int64_t)refresh);
+    return target - refresh / 2;
+}
+
 #endif
 
 // End rendering into the window image and present it. shot_path: also save the window image as PNG.
@@ -1297,7 +1336,7 @@ void vk_frame_end(const char *shot_path) {
     {
         extern int vk_ab(const char *what);
         extern uint64_t plat_now_ns(void);
-        uint64_t due = grid ? grid + present_delay_ns() : 0;
+        uint64_t due = grid ? present_lock(grid + present_delay_ns()) : 0;
         int ab = vk_ab("timing");  // (LARECOMP_AB=<frames>:timing: -1 when not under test)
         static int last_ab = -2;
         if (ab != last_ab && ab >= 0) LOG("[ab] timing %d from %llu\n", ab, (unsigned long long)plat_now_ns());
