@@ -14,7 +14,7 @@ An **unofficial** modification of [BOTWRecompAndroid](https://github.com/mamcjr/
 > but took no part in these changes, didn't test them and isn't responsible for them.
 
 > [!CAUTION]
-> **A problem with this version? Open an [issue here](../../issues). Never take these complaints to the original project.**
+> **A problem with this version? Open an [issue here](https://github.com/Moab-tk/BOTWRecompAndroid-S23/issues). Never take these complaints to the original project.**
 > A bug here may have been created by these changes and may not exist in the original. It may work well on the tester's
 > phone and badly on yours.
 

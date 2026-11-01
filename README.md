@@ -14,7 +14,7 @@ Modificação **não oficial** do [BOTWRecompAndroid](https://github.com/mamcjr/
 > mas não participou destas mudanças, não as testou e não responde por elas.
 
 > [!CAUTION]
-> **Problema nesta versão? Abra uma [issue aqui](../../issues). Nunca leve estas reclamações ao projeto original.**
+> **Problema nesta versão? Abra uma [issue aqui](https://github.com/Moab-tk/BOTWRecompAndroid-S23/issues). Nunca leve estas reclamações ao projeto original.**
 > Um erro nesta versão pode ter sido criado por estas modificações e pode não existir no original. Ela pode funcionar
 > bem no celular de quem testou e funcionar mal no seu.
 
