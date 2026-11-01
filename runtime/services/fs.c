@@ -339,6 +339,82 @@ static void add_new_files(int fd, const uint64_t *h, const uint8_t *dmeta, uint6
     LOG("[fs] mods: %d new romfs files%s\n", added, new_dirs ? " (and new directories)" : "");
 }
 
+// Yaz0 data of src: its first lit bytes as they are, the rest copied from 4 bytes back (src repeats there).
+static size_t yaz0_repeating(uint8_t *out, const uint8_t *src, size_t n, size_t lit) {
+    size_t o = 0, s = 0;
+    while (s < n) {
+        size_t head = o++;
+        uint8_t bits = 0;
+        for (int b = 7; b >= 0 && s < n; b--) {
+            if (s < lit || n - s < 3) {
+                bits |= (uint8_t)(1 << b);
+                out[o++] = src[s++];
+                continue;
+            }
+            size_t c = n - s > 0x111 ? 0x111 : n - s;
+            if (c >= 0x12) out[o++] = 0, out[o++] = 3, out[o++] = (uint8_t)(c - 0x12);
+            else out[o++] = (uint8_t)((c - 2) << 4), out[o++] = 3;
+            s += c;
+        }
+        out[head] = bits;
+    }
+    return o;
+}
+
+// (S23) LARECOMP_DRAW_DISTANCE=1: the game's own shorter draw distance on the whole map. Its LOD manager holds the
+// distance multiplier at 0.7 on the cells Ecosystem/LoadBalancer.sbeco marks, in Pack/Bootup.pack; reads of that file
+// get one with every cell marked, made here and never stored (the game's files stay as they are).
+static void draw_distance_short(int fd) {
+    if (R->dlc || !getenv("LARECOMP_DRAW_DISTANCE") || !atoi(getenv("LARECOMP_DRAW_DISTANCE")) || npatches >= 8) return;
+    const RomFile *f = NULL;
+    for (int i = 0; i < rom_nfiles; i++) if (!strcmp(rom_files[i].path, "Pack/Bootup.pack")) f = &rom_files[i];
+    char host[1200];
+    if (!f || mods_override(f->path, host, sizeof host) || mods_romfs_override(f->path, host, sizeof host)) return;
+    uint8_t h[32];
+    if (img_pread(fd, h, sizeof h, (off_t)f->off) != (ssize_t)sizeof h || memcmp(h, "SARC", 4) || memcmp(h + 20, "SFAT", 4)) return;
+    uint32_t data;
+    uint16_t n;
+    memcpy(&data, h + 12, 4);
+    memcpy(&n, h + 26, 2);
+    uint8_t *t = malloc(data);
+    if (img_pread(fd, t, data, (off_t)f->off) != (ssize_t)data) { free(t); return; }
+    const uint32_t nodes = 32, names = nodes + 16u * n + 8;
+    for (uint32_t i = 0; i < n; i++) {
+        uint32_t attr, ini, fim;
+        memcpy(&attr, t + nodes + 16 * i + 4, 4);
+        memcpy(&ini, t + nodes + 16 * i + 8, 4);
+        memcpy(&fim, t + nodes + 16 * i + 12, 4);
+        if (strcmp((const char *)t + names + (attr & 0xffffff) * 4, "Ecosystem/LoadBalancer.sbeco")) continue;
+        enum { ROWS = 800, HEAD = 16, RAW = HEAD + ROWS * 8 };
+        static uint8_t raw[RAW];
+        uint32_t he[4] = {0x00112233, ROWS, 10, 0};  // (a row: one segment, every cell marked; the map is 1000 cells wide)
+        memcpy(raw, he, HEAD);
+        for (uint32_t r = 0; r < ROWS; r++) {
+            uint32_t off = r * 2;
+            uint16_t seg[2] = {1, 1000};
+            memcpy(raw + HEAD + r * 4, &off, 4);
+            memcpy(raw + HEAD + ROWS * 4 + r * 4, seg, 4);
+        }
+        uint32_t size = fim - ini;
+        uint8_t *slot = calloc(1, RAW + RAW / 8 + 32 > size ? RAW + RAW / 8 + 32 : size);
+        uint8_t z[16];
+        if (img_pread(fd, z, 16, (off_t)(f->off + data + ini)) == 16 && !memcmp(z, "Yaz0", 4)) {
+            const uint32_t be = __builtin_bswap32(RAW);
+            memcpy(z + 4, &be, 4);
+            memcpy(slot, z, 16);
+            size_t used = 16 + yaz0_repeating(slot + 16, raw, RAW, HEAD + ROWS * 4 + 4);
+            if (used <= size) {
+                patches[npatches++] = (Patch){f->off + data + ini, size, slot};
+                LOG("[fs] draw distance: the game's shorter one on the whole map (%zu bytes of %u)\n", used, size);
+                slot = NULL;
+            }
+        }
+        free(slot);
+        break;
+    }
+    free(t);
+}
+
 static void rom_index(int fd) {
     uint64_t h[10];
     if (img_pread(fd, h, sizeof h, 0) != (ssize_t)sizeof h) return;
@@ -400,6 +476,7 @@ static void rom_index(int fd) {
     }
     if (ov_n) LOG("[fs] mods: %d romfs files replaced\n", ov_n);
     if (ov_meta) { patches[npatches++] = (Patch){ov_meta_off, ov_meta_size, ov_meta}; }
+    draw_distance_short(fd);
     add_new_files(fd, h, dmeta, dsz, fsz);
     qsort(rom_files, rom_nfiles, sizeof *rom_files, rom_cmp);
     free(dmeta);
@@ -410,11 +487,11 @@ static void rom_index(int fd) {
 
 // Virtual RomFS image read: original bytes, with the patched file table and appended replacement files.
 static ssize_t romfs_read(int fd, uint8_t *dst, uint64_t size, uint64_t off) {
-    if (!ov_n) return img_pread(fd, dst, size, (off_t)off);
+    if (!ov_n && !npatches) return img_pread(fd, dst, size, (off_t)off);
     uint64_t done = 0;
     while (done < size) {
         uint64_t o = off + done, n = size - done;
-        if (o >= ov[0].start) {  // appended region
+        if (ov_n && o >= ov[0].start) {  // appended region
             int i = 0;
             while (i < ov_n && !(o >= ov[i].start && o < ov[i].start + ((ov[i].size + 0xF) & ~0xFull))) i++;
             if (i == ov_n) { memset(dst + done, 0, n); done += n; break; }
@@ -431,7 +508,7 @@ static ssize_t romfs_read(int fd, uint8_t *dst, uint64_t size, uint64_t off) {
             if (r < 0) r = 0;
             if ((uint64_t)r < n) memset(dst + done + r, 0, n - r);
         } else {
-            if (o + n > ov[0].start) n = ov[0].start - o;
+            if (ov_n && o + n > ov[0].start) n = ov[0].start - o;
             ssize_t r = img_pread(fd, dst + done, n, (off_t)o);
             if (r < 0) r = 0;
             if ((uint64_t)r < n) memset(dst + done + r, 0, n - r);
