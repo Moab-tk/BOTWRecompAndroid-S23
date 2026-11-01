@@ -1,5 +1,7 @@
 # BOTW S23
 
+**Português** | [English](README.en.md)
+
 Modificação **não oficial** do [BOTWRecompAndroid](https://github.com/mamcjr/BOTWRecompAndroid), ajustada para o
 **Samsung Galaxy S23 Ultra** (Snapdragon 8 Gen 2, Adreno 740).
 
@@ -11,6 +13,13 @@ Modificação **não oficial** do [BOTWRecompAndroid](https://github.com/mamcjr/
 
 > [!NOTE]
 > Não leve nada a sério. Se não der certo no seu celular, é só deixar para lá e baixar a versão que achar melhor.
+
+> [!WARNING]
+> **O celular dos testes é modificado.** É um S23 Ultra de 12 GB, um aparelho já forte, com overclock, com o limitador
+> térmico do sistema desativado por ferramentas de terceiros, com outras modificações que melhoram levemente o desempenho
+> e com cooler. Nenhum número desta página vale como promessa para um celular comum. No meu teste pessoal, esta versão
+> teve ganho real de desempenho e de fluidez nesse aparelho. Fica para outras pessoas testarem como ela se sai em celulares
+> sem modificação.
 
 O texto original do projeto, com todos os detalhes técnicos, está em [README-ORIGINAL.md](README-ORIGINAL.md). A lista
 do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
@@ -27,7 +36,8 @@ do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
   outra.
 - **Dois drivers Turnip já no aplicativo**, em Configurações > Arquivos > Driver Vulkan, com o indicado para o seu
   celular marcado como Recomendado.
-- **Configurações recomendadas com um toque**, as mesmas testadas no S23 Ultra.
+- **Configurações recomendadas com um toque:** as testadas no S23 Ultra e uma opção mais leve para o S23, o S23+ e
+  celulares mais fracos.
 - **Configurações salvas:** 8 blocos para guardar tudo o que você ajustou e voltar quando um teste piorar.
 - **Interface maior e mais fácil de tocar:** escolha de tamanho do texto, nomes longos que deslizam, opções em cartões.
 - **Quadros regulares a 30 FPS:** a tela fica em 60 Hz e cada quadro segue o ritmo real dela. Nas medições, 97% dos
@@ -49,13 +59,19 @@ Atualizando uma versão anterior desta modificação, basta instalar por cima: o
 
 ## Configurações recomendadas
 
-Esses são os valores que o botão aplica:
+Esses são os valores que os botões aplicam. A opção mais leve não foi testada no S23, no S23+ nem em celulares mais
+fracos.
+
+| Opção | S23 Ultra | S23, S23+ e mais fracos |
+|---|---|---|
+| Limite de quadros | 30 FPS | 30 FPS |
+| Resolução interna | 1x | 75% |
+| Resolução de saída | 1080 linhas | 900 linhas |
+
+As duas usam os mesmos valores abaixo:
 
 | Opção | Valor |
 |---|---|
-| Limite de quadros | 30 FPS |
-| Resolução interna | 1x |
-| Resolução de saída | 900 linhas |
 | Ampliação da imagem | FSR 1 |
 | Suavização | Desligada |
 | Código do jogo | Nativo |
@@ -81,8 +97,9 @@ O de One UI pode fazer a tela piscar em celulares que não são Samsung. Em outr
 
 ## Desempenho medido
 
-Estes números são de um único aparelho e não são promessa. Nas partidas abaixo: S23 Ultra, jogo na versão 1.8.2, código
-nativo, 30 FPS, resolução 1x. Até a b7, a saída era de 900 linhas; na b8, de 1080, com a proporção original.
+Estes números são de um único aparelho **modificado** e não são promessa: S23 Ultra de 12 GB, com overclock e outras
+modificações, jogo na versão 1.8.2, código nativo, 30 FPS, resolução 1x. Até a b7, a saída era de 900 linhas; na b8, de
+1080, com a proporção original.
 
 | Medição | FPS médio | Medições abaixo de 29 FPS | Picos de 100 ms ou mais |
 |---|---:|---:|---:|
@@ -105,9 +122,10 @@ distância de visão reduzida do próprio jogo no mapa inteiro (3,5% menos desen
 GPU).
 
 > [!WARNING]
-> Essas partidas foram feitas com **cooler no celular** e com o **limitador térmico do sistema desativado pelo dono do
-> aparelho**, por ferramentas de terceiros. Isso não faz parte do app e não é recomendado aqui: desativar a proteção
-> térmica é por sua conta e risco. O chip passou de 80 °C. Sem cooler, espere menos desempenho.
+> Essas partidas foram feitas com **overclock**, com **cooler no celular** e com o **limitador térmico do sistema
+> desativado pelo dono do aparelho**, por ferramentas de terceiros. Nada disso faz parte do app, e nada disso é recomendado
+> aqui: fazer essas modificações é por sua conta e risco. O chip passou de 80 °C. Sem essas modificações, espere menos
+> desempenho.
 
 ## Problemas conhecidos
 
@@ -130,7 +148,7 @@ GPU).
 
 ## Opções de teste
 
-Em Configurações > Arquivos > Testes há opções que vêm desligadas: manter a GPU acordada, modo de apresentação, núcleos
+Na tela inicial, em Configurações > Vídeo > Testes, há opções que vêm desligadas: manter a GPU acordada, modo de apresentação, núcleos
 para shaders, filtro anisotrópico e modo do Turnip. Teste uma por vez e salve um bloco antes. **Manter a GPU acordada**
 não teve ganho comprovado e, se o sistema fechar o app à força, pode continuar ligada até você abrir o app de novo ou
 reiniciar o celular.

@@ -1404,6 +1404,83 @@ static void version_rows(bool busy, bool focus) {
     }
 }
 
+// (S23) The end of the Video tab on the start screen (ui/menu.mm tab_display): options read when the game or the app starts.
+void launcher_video_options(void) {
+    bool changed = false;
+    opt_section("Frame rhythm");
+    changed |= opt_toggle("Steady frames at 30 FPS", &g_settings.panel_lock, true,
+                          "Keeps the screen at 60 Hz and shows each frame on the screen's own rhythm, so the game feels smoother "
+                          "at 30 FPS. It adds a little delay to the controls. Applies when the game starts.");
+
+    opt_section("Advanced");
+    {   // (runtime/settings.h gpu_heap / inplace_reads / turnip_lrz / log_file: for GPUs where a Turnip path draws wrong)
+        const bool a8 = vk_adreno_8xx(vk_gpu_name());  // (Automatic: on for the Adreno 8xx and the 740)
+        const char *tri_names[] = {a8 ? "Automatic (on for this GPU)" : "Automatic (off for this GPU)", "On", "Off"};
+        auto tri = [&](const char *label, int *v, const char *desc) {  // Automatic / On / Off: -1 / 1 / 0
+            int i = *v < 0 ? 0 : *v ? 1 : 2;
+            if (opt_choice(label, &i, tri_names, 3, 0, desc)) {
+                *v = i == 0 ? -1 : i == 1 ? 1 : 0;
+                changed = true;
+            }
+        };
+        tri("Game memory on the GPU (Turnip)", &g_settings.gpu_heap,
+            "On: the game's memory is mapped straight into the GPU's, the fastest way. Off: what each frame uses is copied instead - it "
+            "draws right where the fast way doesn't, but this game runs at about half the frame rate (15 fps instead of 35 on an "
+            "Adreno 830). Automatic: on for Adreno 8xx GPUs, off for the others - on another Adreno, try On first. Applies when the "
+            "game starts.");
+        tri("Draw-target reads in place (Turnip)", &g_settings.inplace_reads,
+            "On: decals and effects read the image they draw on as it is, the fastest way. Off: a copy of it each time, slower (fewer "
+            "fps) but by the Vulkan rules. Automatic: on for Adreno 8xx GPUs, off for the others. Applies when the game starts.");
+        tri("Turnip low-resolution Z (LRZ)", &g_settings.turnip_lrz,
+            "Turnip's early depth test, a little faster. Off can fix missing or broken drawing on some Adreno GPUs. Automatic: on for "
+            "Adreno 8xx GPUs, off for the others. Applies when BOTWRecompAndroid restarts.");
+        bool lrz_now = g_settings.turnip_lrz < 0 ? a8 : g_settings.turnip_lrz != 0;
+        if (lrz_now != vk_lrz_at_start() && opt_button("Restart now##lrz", "Restart BOTWRecompAndroid to apply it.")) {
+            settings_save();
+            android_call("restartApp");
+        }
+    }
+
+    opt_section("Tests (optional)");
+    {   // (S23) from the look at Eden's options; all off by default, to compare one at a time
+        if (opt_toggle("Keep the GPU awake", &g_settings.gpu_turbo, false,
+                       "The GPU doesn't rest between frames, as Eden's force max clock: frame times may get steadier, but the "
+                       "phone gets hotter and the battery drains faster. It only stays on while the app is in front. On "
+                       "at once.")) {
+            vk_gpu_turbo(true);
+            changed = true;
+        }
+        int fifo = g_settings.present_fifo;
+        const char *present[] = {"Mailbox (default)", "FIFO"};
+        if (opt_choice("Presentation mode", &fifo, present, 2, 0,
+                       "How finished frames reach the screen. Mailbox: a newer frame replaces one still waiting. FIFO: every "
+                       "frame is shown, in order - it may look smoother, but if the screen falls behind the game waits for it. "
+                       "Applies when BOTWRecompAndroid restarts.")) {
+            g_settings.present_fifo = fifo != 0;
+            changed = true;
+        }
+        changed |= opt_int("Shader build threads", &g_settings.shader_workers, 0, 6, 1, 0, "%d",
+                           "CPU threads building shaders. Automatic: 4 on this phone. Fewer leave more CPU for the game, but "
+                           "effects take longer to appear; more get them ready sooner, and can take CPU from the game. Applies "
+                           "when the game starts.", "Automatic");
+        const char *aniso[] = {"Game's own", "Off", "2x", "4x", "8x", "16x"};
+        changed |= opt_choice("Anisotropic filtering", &g_settings.force_aniso, aniso, 6, 0,
+                              "Sharpness of textures seen at an angle, as the ground far away. Game's own: what the game asks for. "
+                              "Off and low values save some GPU time; high values look sharper and cost more. Applies when the "
+                              "game starts.");
+        const char *modes[] = {"Automatic", "Always tiled (gmem)", "Always direct (sysmem)", "No compression (noubwc)"};
+        changed |= opt_choice("Turnip drawing mode", &g_settings.turnip_mode, modes, 4, 0,
+                              "Only for the Turnip driver. Automatic: it picks for each pass, the best choice in general. The two "
+                              "fixed modes are there to compare frame rates. No compression is only to look for drawing errors, "
+                              "and it's slower. Applies when BOTWRecompAndroid restarts.");
+        if (vk_tests_changed() && opt_button("Restart now##tests", "Restart BOTWRecompAndroid to apply it.")) {
+            settings_save();
+            android_call("restartApp");
+        }
+    }
+    if (changed) settings_save();
+}
+
 static SDL_Window *g_launcher_win;
 static bool g_files_deleted;  // set here: the start screen goes back to setting the game files up
 static bool g_open_files;     // Settings > Prelaunch: the Game Files page (versions, setup) instead
@@ -1630,33 +1707,8 @@ static void prelaunch_rows(float sc) {
         if (!g_font_msg.empty()) note_row(tr(g_font_msg.c_str()));
     }
 
-    opt_section("Advanced");
-    {   // (runtime/settings.h gpu_heap / inplace_reads / turnip_lrz / log_file: for GPUs where a Turnip path draws wrong)
-        const bool a8 = vk_adreno_8xx(vk_gpu_name());  // (Automatic: on for the Adreno 8xx and the 740)
-        const char *tri_names[] = {a8 ? "Automatic (on for this GPU)" : "Automatic (off for this GPU)", "On", "Off"};
-        auto tri = [&](const char *label, int *v, const char *desc) {  // Automatic / On / Off: -1 / 1 / 0
-            int i = *v < 0 ? 0 : *v ? 1 : 2;
-            if (opt_choice(label, &i, tri_names, 3, 0, desc)) {
-                *v = i == 0 ? -1 : i == 1 ? 1 : 0;
-                changed = true;
-            }
-        };
-        tri("Game memory on the GPU (Turnip)", &g_settings.gpu_heap,
-            "On: the game's memory is mapped straight into the GPU's, the fastest way. Off: what each frame uses is copied instead - it "
-            "draws right where the fast way doesn't, but this game runs at about half the frame rate (15 fps instead of 35 on an "
-            "Adreno 830). Automatic: on for Adreno 8xx GPUs, off for the others - on another Adreno, try On first. Applies when the "
-            "game starts.");
-        tri("Draw-target reads in place (Turnip)", &g_settings.inplace_reads,
-            "On: decals and effects read the image they draw on as it is, the fastest way. Off: a copy of it each time, slower (fewer "
-            "fps) but by the Vulkan rules. Automatic: on for Adreno 8xx GPUs, off for the others. Applies when the game starts.");
-        tri("Turnip low-resolution Z (LRZ)", &g_settings.turnip_lrz,
-            "Turnip's early depth test, a little faster. Off can fix missing or broken drawing on some Adreno GPUs. Automatic: on for "
-            "Adreno 8xx GPUs, off for the others. Applies when BOTWRecompAndroid restarts.");
-        bool lrz_now = g_settings.turnip_lrz < 0 ? a8 : g_settings.turnip_lrz != 0;
-        if (lrz_now != vk_lrz_at_start() && opt_button("Restart now##lrz", "Restart BOTWRecompAndroid to apply it.")) {
-            settings_save();
-            android_call("restartApp");
-        }
+    opt_section("Log file");
+    {
         if (!g_log_folder_read) {
             g_log_folder_read = true;
             log_folder_read();
@@ -1673,48 +1725,6 @@ static void prelaunch_rows(float sc) {
             else android_log_file(g_settings.log_file);
         }
         if (opt_action(folder.empty() ? "Choose folder" : "Change folder", folder.c_str(), log_about)) android_call("pickLogFolder");
-    }
-
-    changed |= opt_toggle("Steady frames at 30 FPS", &g_settings.panel_lock, true,
-                          "Keeps the screen at 60 Hz and shows each frame on the screen's own rhythm, so the game feels smoother "
-                          "at 30 FPS. It adds a little delay to the controls. Applies when the game starts.");
-
-    opt_section("Tests (optional)");
-    {   // (S23) from the look at Eden's options; all off by default, to compare one at a time
-        if (opt_toggle("Keep the GPU awake", &g_settings.gpu_turbo, false,
-                       "The GPU doesn't rest between frames, as Eden's force max clock: frame times may get steadier, but the "
-                       "phone gets hotter and the battery drains faster. It only stays on while the app is in front. On "
-                       "at once.")) {
-            vk_gpu_turbo(true);
-            changed = true;
-        }
-        int fifo = g_settings.present_fifo;
-        const char *present[] = {"Mailbox (default)", "FIFO"};
-        if (opt_choice("Presentation mode", &fifo, present, 2, 0,
-                       "How finished frames reach the screen. Mailbox: a newer frame replaces one still waiting. FIFO: every "
-                       "frame is shown, in order - it may look smoother, but if the screen falls behind the game waits for it. "
-                       "Applies when BOTWRecompAndroid restarts.")) {
-            g_settings.present_fifo = fifo != 0;
-            changed = true;
-        }
-        changed |= opt_int("Shader build threads", &g_settings.shader_workers, 0, 6, 1, 0, "%d",
-                           "CPU threads building shaders. Automatic: 4 on this phone. Fewer leave more CPU for the game, but "
-                           "effects take longer to appear; more get them ready sooner, and can take CPU from the game. Applies "
-                           "when the game starts.", "Automatic");
-        const char *aniso[] = {"Game's own", "Off", "2x", "4x", "8x", "16x"};
-        changed |= opt_choice("Anisotropic filtering", &g_settings.force_aniso, aniso, 6, 0,
-                              "Sharpness of textures seen at an angle, as the ground far away. Game's own: what the game asks for. "
-                              "Off and low values save some GPU time; high values look sharper and cost more. Applies when the "
-                              "game starts.");
-        const char *modes[] = {"Automatic", "Always tiled (gmem)", "Always direct (sysmem)", "No compression (noubwc)"};
-        changed |= opt_choice("Turnip drawing mode", &g_settings.turnip_mode, modes, 4, 0,
-                              "Only for the Turnip driver. Automatic: it picks for each pass, the best choice in general. The two "
-                              "fixed modes are there to compare frame rates. No compression is only to look for drawing errors, "
-                              "and it's slower. Applies when BOTWRecompAndroid restarts.");
-        if (vk_tests_changed() && opt_button("Restart now##tests", "Restart BOTWRecompAndroid to apply it.")) {
-            settings_save();
-            android_call("restartApp");
-        }
     }
 
     opt_section("Credits");
@@ -1750,12 +1760,13 @@ struct SettingBlock {
 static SettingBlock g_blocks[SETTING_BLOCKS];
 // (S23) The start screen's recommended settings: what played well on the Galaxy S23 Ultra, with the driver for the phone.
 // Only these: the display, the sound, the controls and the mods stay as the player has them. Restarts the app, as a block.
-static bool g_rec_ask;
-static void recommended_apply() {
+// lighter: for the Galaxy S23, S23+ and weaker phones, a smaller image for less heat. Not measured on those phones.
+static int g_rec_ask;  // 1 the S23 Ultra's, 2 the lighter ones
+static void recommended_apply(bool lighter) {
     g_settings.fps_mode = 1;  // (30)
     g_settings.event_fps_unlock = true;
-    g_settings.res_mode = 1;
-    g_settings.out_lines = 900;
+    g_settings.res_mode = lighter ? RES_Q75 : 1;
+    g_settings.out_lines = lighter ? 900 : 1080;
     g_settings.upscaler = UPSCALE_SHARP;
     g_settings.antialias = AA_OFF;
     g_settings.shader_int32 = true;
@@ -1847,14 +1858,18 @@ static void blocks_rows(float sc) {
     opt_begin("##blocks", sc);
     if (g_block_open < 0) {
         opt_section("Recommended");
-        const char *rec = "The settings tested on the Galaxy S23 Ultra, with the driver for this phone: 30 fps, 1x resolution, 900 lines, "
+        const char *rec = "The settings tested on the Galaxy S23 Ultra, with the driver for this phone: 30 fps, 1x resolution, 1080 lines, "
                           "FSR 1 and native game code. Your screen shape, sound, controls, mods and game saves stay as they are. On "
                           "another phone the result may differ.";
+        const char *light = "Lighter settings for the Galaxy S23, S23+ and weaker phones, with the driver for this phone: 30 fps, 75% "
+                            "resolution, 900 lines, FSR 1 and native game code. The image is softer. They weren't tested on those "
+                            "phones. Your screen shape, sound, controls, mods and game saves stay as they are.";
         if (!g_rec_ask) {
-            if (opt_action("Use the recommended settings", "S23 Ultra", rec, false)) g_rec_ask = true;
+            if (opt_action("Use the recommended settings", "S23 Ultra", rec, false)) g_rec_ask = 1;
+            if (opt_action("Use the lighter settings", "S23, S23+ and weaker", light, false)) g_rec_ask = 2;
         } else {
-            if (opt_button("Yes, apply and restart", rec)) recommended_apply();
-            if (opt_button("Cancel", "Keeps everything as it is.")) g_rec_ask = false;
+            if (opt_button("Yes, apply and restart", g_rec_ask == 2 ? light : rec)) recommended_apply(g_rec_ask == 2);
+            if (opt_button("Cancel", "Keeps everything as it is.")) g_rec_ask = 0;
         }
         opt_section("Saved settings");
         for (int i = 0; i < SETTING_BLOCKS; i++) {

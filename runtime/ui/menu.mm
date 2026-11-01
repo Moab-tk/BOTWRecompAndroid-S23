@@ -513,7 +513,11 @@ extern "C" void renderer_get_scale(float *sx, float *sy);        // (the final i
 extern "C" int input_pad_family(void);  // runtime/hle/input.c
 extern "C" double output_scale_dynamic_factor(void);
 
-static void tab_display(void) {
+#ifdef __ANDROID__
+void launcher_video_options(void);  // (ui/launcher.mm)
+#endif
+
+static void tab_display(bool in_game) {
     float scale = ImGui::GetFontSize() / 34;
     opt_begin("##video", scale);
     opt_section("Display");
@@ -674,6 +678,7 @@ static void tab_display(void) {
                "Translates the game's shaders with 32-bit address math, the path used for drivers without 64-bit "
                "integers (Adreno 6xx / 7xx and Mali stock drivers). Try it if lighting, grass or text are missing or wrong "
                "on your GPU. Applies to shaders translated from now on: restart the app for all of them.");
+    if (!in_game) launcher_video_options();  // (they restart the app or apply at the next start)
 #endif
     opt_end();
 }
@@ -975,7 +980,7 @@ static bool sheikah_button(const char *label, ImVec2 size, int icon, float scale
 static void settings_page(int id, float scale, bool in_game, void (*prelaunch)(float)) {
     switch (id) {
     case -1: prelaunch(scale); break;
-    case 0: tab_display(); break;
+    case 0: tab_display(in_game); break;
     case 1: tab_audio(); break;
     case 8: tab_about(); break;
     case 9: tab_quit(scale, in_game); break;

@@ -105,13 +105,20 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - A tela agora fica em 60 Hz.
 - O relógio do jogo e o da tela andam em velocidades um pouco diferentes (16,67 e 16,66 ms por atualização). Cada quadro
   passa a seguir o ritmo real da tela, medido pelo próprio sistema.
-- Vem ligado, com o nome **Quadros regulares a 30 FPS**, em Configurações > Arquivos. Deixa os comandos um pouco mais
+- Vem ligado, com o nome **Quadros regulares a 30 FPS**, em Configurações > Vídeo. Deixa os comandos um pouco mais
   atrasados, porque cada quadro é mostrado com 50 ms de folga.
 
 **Som**
 
 - Na primeira abertura depois de instalar, o canal de som de baixa latência podia abrir e falhar ao iniciar, e uma só
   tentativa deixava a sessão muda. Agora são 3 tentativas e depois mais 3 sem baixa latência.
+
+**Interface**
+
+- As opções Avançado e Testes saem de Arquivos e vão para Vídeo, na tela inicial.
+- Segundo botão de configurações recomendadas, mais leve, para o S23, o S23+ e celulares mais fracos: resolução 75% e
+  saída de 900 linhas. Essa opção não foi testada nesses celulares.
+- A opção do S23 Ultra passa a usar saída de 1080 linhas.
 
 ## O que não foi modificado
 
