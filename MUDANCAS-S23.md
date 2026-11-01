@@ -1,7 +1,7 @@
 # O que mudou em relação ao original
 
-Ponto de partida: BOTWRecompAndroid `0.2.3-beta`, de [mamcjr](https://github.com/mamcjr/BOTWRecompAndroid). A versão de
-cada etapa está no histórico do repositório.
+Projeto original: [BOTWRecompAndroid](https://github.com/mamcjr/BOTWRecompAndroid), de mamcjr. As versões de b1 a b8 partem
+da `0.2.3-beta`, e a b9 parte da `0.2.10-beta`. A versão de cada etapa está no histórico do repositório.
 
 ## Resumo por área
 
@@ -119,6 +119,23 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - Segundo botão de configurações recomendadas, mais leve, para o S23, o S23+ e celulares mais fracos: resolução 75% e
   saída de 900 linhas. Essa opção não foi testada nesses celulares.
 - A opção do S23 Ultra passa a usar saída de 1080 linhas.
+
+**Revisão antes de publicar**
+
+- Correção das "cortinas" da 0.2.10 de mamcjr.
+- Orçamento de 30 FPS para o sistema no modo de 30 FPS, também de mamcjr: o processador não trabalha mais rápido do que
+  precisa.
+- A tela volta a pedir 60 Hz quando o app retorna do segundo plano.
+- Quadros regulares só em celulares com tempo de exibição no driver, e só no modo de 30 FPS.
+- As configurações recomendadas usam Automático nos modos do Turnip, o que é seguro em qualquer GPU.
+- O atalho do driver do sistema não apaga mais os drivers guardados.
+- Três drivers novos no app, marcados como não testados, e licenças dentro do APK.
+
+### b9: junção com o original 0.2.10
+
+- Tudo da b8, sobre a `0.2.10-beta` de mamcjr.
+- Traz as correções do original até ela, como vídeos, sensor de movimento, texturas grandes e idiomas novos.
+- A tabela de comandos passa a ser a do original.
 
 ## O que não foi modificado
 

@@ -6,10 +6,17 @@ An **unofficial** modification of [BOTWRecompAndroid](https://github.com/mamcjr/
 **Samsung Galaxy S23 Ultra** (Snapdragon 8 Gen 2, Adreno 740).
 
 > [!IMPORTANT]
-> **All credit for the project goes to [mamcjr](https://github.com/mamcjr), author of BOTWRecompAndroid, and to
-> [peiikai](https://github.com/peiikai), author of LAS Recomp, where it all starts.** This version is only a modification
-> made with AI from one person's ideas. It isn't made or supported by the original authors, so please don't take its
-> problems to them.
+> **The original project belongs to [mamcjr](https://github.com/mamcjr), creator of
+> [BOTWRecompAndroid](https://github.com/mamcjr/BOTWRecompAndroid), built on the LAS Recomp by
+> [peiikai](https://github.com/peiikai). All credit for the project is theirs.**
+>
+> This version is a personal modification made by someone else, with help from AI. mamcjr gave permission to publish it,
+> but took no part in these changes, didn't test them and isn't responsible for them.
+
+> [!CAUTION]
+> **A problem with this version? Open an [issue here](../../issues). Never take these complaints to the original project.**
+> A bug here may have been created by these changes and may not exist in the original. It may work well on the tester's
+> phone and badly on yours.
 
 > [!NOTE]
 > Don't take any of this too seriously. If it doesn't work on your phone, just leave it and download the version you like
@@ -34,8 +41,9 @@ extracted). No instructions on how to get it will be given.
 - **Built for the S23's processor**, without the instructions it doesn't have.
 - **Installs next to the original:** the package is different (`com.botwrecomp.android.s23`), so one doesn't replace the
   other.
-- **Two Turnip drivers in the app**, in Settings > Files > Vulkan driver, with the right one for your phone marked as
-  Recommended.
+- **Based on version 0.2.10 of the original**, with mamcjr's fixes up to it.
+- **Five Turnip drivers in the app**, in Settings > Files > Vulkan driver. The two tested ones show as Recommended, and
+  the three newer ones show as not tested on this game.
 - **Steady frames at 30 FPS:** the screen stays at 60 Hz and each frame follows its real rhythm. In the measurements, 97%
   of the frames showed on time, with none dropped.
 - **Recommended settings with one tap:** the ones tested on the S23 Ultra, and a lighter option for the S23, S23+ and
@@ -75,21 +83,24 @@ Both use the values below:
 | Game code | Native |
 | Presentation | FIFO |
 | Steady frames at 30 FPS | On |
-| Driver compatibility | All on |
+| Driver compatibility | Automatic (on for the Adreno 740) |
 | Driver | The Turnip recommended for your phone |
 
 The screen shape, sound, controls, mods and saves don't change.
 
 ## Which driver to use
 
-Both come from the same release (`v27.0.0-20261025-r5`, by
-[The412Banner](https://github.com/The412Banner/Banners-Turnip)), built from Mesa.
+All are Mesa builds by [The412Banner](https://github.com/The412Banner/Banners-Turnip). The 10/25 ones were used in the
+tests. The 11/01 ones are automated builds: their author warns they weren't tested on a device, and they weren't tested on
+this game.
 
-| Your phone | Driver |
-|---|---|
-| Galaxy S23, with One UI | `Turnip-v27.0.0-20261025-r5-8G2-OneUI` |
-| Other Snapdragon 8 Gen 2 | `Turnip-v27.0.0-20261025-r5` |
-| Other Adreno 6xx and 7xx GPUs | `Turnip-v27.0.0-20261025-r5`, no guarantee |
+| Your phone | Driver | Status |
+|---|---|---|
+| Galaxy S23, with One UI | `Turnip-v27.0.0-20261025-r5-8G2-OneUI` | Recommended |
+| Other Snapdragon 8 Gen 2 | `Turnip-v27.0.0-20261025-r5` | Recommended |
+| Galaxy S23, with One UI | `Turnip-v27.0.0-20261101-r4-8G2-OneUI` | Newer, not tested |
+| Other Adreno 6xx and 7xx GPUs | `Turnip-v27.0.0-20261101-r4` | Newer, not tested |
+| Adreno 8xx (Snapdragon 8 Elite) | `Turnip-v27.0.0-20261101-r4-A8xx` | Experimental, not tested |
 
 The One UI one may make the screen flicker on phones that aren't Samsung. Nothing here was tested on other devices.
 
@@ -104,6 +115,9 @@ original aspect ratio.
 | b6: 10 minutes in varied places | 29.9 | 6 of 290 | 1 |
 | A b7 stage: 11 minutes in areas never visited | 29.9 | 5 of 341 | 5 |
 | b8: 4 and a half minutes | 29.9 | 6 of 120 | 4 |
+
+On b9, standing still at the same spot and in the same save as b8, with the phone charging: 29.9 FPS against 29.8; 93.7% of
+frames on time against 90.8%; and 84.4 °C on the processor against 86.8 °C.
 
 Each sample covers 2 seconds of play. Average FPS doesn't tell everything: it shows how many frames went out, not whether
 they reached the screen at a steady pace. This was measured by the system itself, on every frame shown:
@@ -125,10 +139,8 @@ game's own shorter draw distance on the whole map (3.5% fewer draws at the same 
 
 ## Known problems
 
-- **Vertical walls on the terrain ("curtains"):** the ground may turn into stretched walls or spikes, mostly after the
-  scene of activating a Sheikah Tower. The defect comes from the original project and shows with any driver. This version
-  has an attempted fix: in the b8 tests the defect didn't show at a spot where it used to, but that isn't confirmation yet.
-  If it happens, load a later save.
+- **Vertical walls on the terrain ("curtains"):** mamcjr fixed this defect in 0.2.10, and the fix is here. It wasn't tested
+  deeply on the S23 yet. If it happens, load a later save.
 - **Stutter in new areas:** on the first visit, a shader may take 250 to 300 ms to get ready. After that it stays on the
   phone, so later visits tend to be lighter.
 - **GPU stuck at a low clock:** in some sessions the system lowered the GPU from 719 to about 300 MHz and only let go when
@@ -148,6 +160,16 @@ On the start screen, in Settings > Video > Tests, there are options that come tu
 mode, shader build threads, anisotropic filtering and Turnip mode. Test one at a time and save a block first. **Keep the
 GPU awake** had no proven gain and, if the system force-closes the app, it may stay on until you open the app again or
 restart the phone.
+
+## Support, if you want
+
+If this version worked for you and you'd like to help with the costs, such as Claude's tokens, voluntary help is welcome.
+
+Donating is optional and gives no benefit: no features, priority, support or special version. It goes to Moab, the author
+of this modification, not to mamcjr, peiikai or Nintendo. To support the original project, use the **Sponsor** button on
+[mamcjr's repository](https://github.com/mamcjr/BOTWRecompAndroid).
+
+Pix (random key): `CHAVE-PIX`
 
 ## Building
 
