@@ -1054,19 +1054,23 @@ static void android_create_surface(struct ANativeWindow *aw) {
 // (S23) The window's frame rate told to Android (the pace's: 30 or 60). A test, off by default: with it the Galaxy S23
 // Ultra showed frames at exactly 33.3 or 66.7 ms - measured with the CPU and GPU underclocked by hand (2026-10-30), so
 // what it costs a normal phone is not known yet. LARECOMP_SET_FRAME_RATE=1: on.
+// LARECOMP_PANEL_HZ=<n>: the screen's refresh asked for instead. Left alone at 30 fps Android runs the panel at 30 Hz,
+// where a frame that misses a refresh waits a whole 33 ms and the next one replaces it.
 #include <android/native_window.h>
 static void android_set_frame_rate(void) {
-    static int on = -1;
+    static int on = -1, panel = -1;
     if (on < 0) on = getenv("LARECOMP_SET_FRAME_RATE") && atoi(getenv("LARECOMP_SET_FRAME_RATE"));
-    if (!on || !surface_aw || android_window() != surface_aw) return;  // (the window it was made for, still alive)
+    if (panel < 0) panel = getenv("LARECOMP_PANEL_HZ") ? atoi(getenv("LARECOMP_PANEL_HZ")) : 0;
+    if ((!on && panel <= 0) || !surface_aw || android_window() != surface_aw) return;  // (the window it was made for, still alive)
     extern int framepace_target(void);
     static struct ANativeWindow *set_aw;
     static int set_fps = -1;
-    int fps = framepace_target();
+    int fps = panel > 0 ? panel : framepace_target();
     if (surface_aw == set_aw && fps == set_fps) return;
     set_aw = surface_aw, set_fps = fps;
     int r = ANativeWindow_setFrameRate(surface_aw, fps > 0 ? (float)fps : 0.0f,
-                                       ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+                                       panel > 0 ? ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT
+                                                 : ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
     LOG("[vk] window frame rate %d fps told to Android (%d)\n", fps, r);
 }
 
