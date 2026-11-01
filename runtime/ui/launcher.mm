@@ -209,6 +209,11 @@ static std::string check_copied_files(const std::string &root) {
     // (the game reads its data through romfs.bin alone: on Android it's built straight from the picked folder, and romfs/
     // holds only the movies, opened by path)
     std::string linked = romfs_link_target(root);
+    struct stat lst;
+    if (!linked.empty() && stat(linked.c_str(), &lst) == 0 && S_ISREG(lst.st_mode)) {  // (in place: the player's romfs.bin)
+        char bad[128];
+        return romfs_image_ok(linked.c_str(), bad, sizeof bad) ? "" : "The game files folder was moved or can't be read";
+    }
     if (!linked.empty())  // (used in place: the player's own romfs/, runtime/services/fs.c)
         return file_exists(linked + "/System/Version.txt") ? "" : "The game files folder was moved or can't be read";
     if (!file_exists(root + "/romfs.bin")) return "Game data missing";
@@ -303,6 +308,9 @@ static bool romfs_check_result(int r, const char *why, int nfiles, const char *v
                 "come from the same version.");
     } else if (r == ROMFS_SET_MISSING) {
         set_failure(FAIL_MISSING);
+    } else if (r == ROMFS_SET_DAMAGED) {  // (a romfs.bin brought ready-made, romfs_check_image)
+        set_job("Game data incomplete: copy romfs.bin again whole", true,
+                "The romfs.bin in that folder can't be read whole. Copy it again from where it was made, or make it again.");
     } else {
         if (nfiles >= 0) fprintf(stderr, "[launcher] romfs: %d files, Version.txt %.16s\n", nfiles, version_txt[0] ? version_txt : "-");
         return true;
@@ -526,10 +534,50 @@ static void android_call_int(const char *method, int v) {  // (one int argument)
     env->DeleteLocalRef(act);
 }
 
+// A content:// URI the SDL dialog picked (Import fonts): its name, and a copy of it at an absolute path
+// (BOTWRecompAndroidActivity documentName / copyDocument)
+static std::string android_document_name(const std::string &uri) {
+    std::string v;
+    JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject act = (jobject)SDL_GetAndroidActivity();
+    if (!env || !act) return v;
+    jclass c = env->GetObjectClass(act);
+    jmethodID m = env->GetStaticMethodID(c, "documentName", "(Ljava/lang/String;)Ljava/lang/String;");
+    jstring u = env->NewStringUTF(uri.c_str());
+    jstring s = m ? (jstring)env->CallStaticObjectMethod(c, m, u) : NULL;
+    if (env->ExceptionCheck()) { env->ExceptionClear(); s = NULL; }
+    if (s) {
+        const char *t = env->GetStringUTFChars(s, NULL);
+        if (t) v = t, env->ReleaseStringUTFChars(s, t);
+        env->DeleteLocalRef(s);
+    }
+    env->DeleteLocalRef(u);
+    env->DeleteLocalRef(c);
+    env->DeleteLocalRef(act);
+    return v;
+}
+
+static bool android_copy_document(const std::string &uri, const std::string &dst) {
+    JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject act = (jobject)SDL_GetAndroidActivity();
+    if (!env || !act) return false;
+    jclass c = env->GetObjectClass(act);
+    jmethodID m = env->GetStaticMethodID(c, "copyDocument", "(Ljava/lang/String;Ljava/lang/String;)Z");
+    jstring u = env->NewStringUTF(uri.c_str()), d = env->NewStringUTF(dst.c_str());
+    bool ok = m && env->CallStaticBooleanMethod(c, m, u, d);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); ok = false; }
+    env->DeleteLocalRef(u);
+    env->DeleteLocalRef(d);
+    env->DeleteLocalRef(c);
+    env->DeleteLocalRef(act);
+    return ok;
+}
+
 // The log file (Driver compatibility; runtime/platform/android.c): written to a folder the player picks
 // (BOTWRecompAndroidActivity pickLogFolder / openLog), where a file manager can open it - Android/data/ is out of its reach
 extern "C" void android_log_file(bool on);
 extern "C" bool vk_adreno_8xx(const char *name);  // (Driver compatibility's Automatic: runtime/nvn/vulkan/device.c)
+extern "C" bool vk_turnip_heap_on(int setting);
 extern "C" bool vk_lrz_at_start(void);
 extern "C" bool vk_tests_changed(void);
 extern "C" void vk_gpu_turbo(bool front);
@@ -685,6 +733,37 @@ extern "C" JNIEXPORT jboolean JNICALL Java_com_botwrecompandroid_BOTWRecompAndro
     int r = romfs_check_set(version, p.data(), n, txt.c_str(), why, sizeof why);
     while (!txt.empty() && (txt.back() == '\n' || txt.back() == '\r' || txt.back() == ' ')) txt.pop_back();
     return romfs_check_result(r, why, n, txt.c_str());
+}
+
+static bool keep_loose(const char *rel);
+
+// A romfs.bin brought ready-made (the picked folder: exefs/ and romfs.bin - made on a PC from the game's own files, no
+// 41,000 files to copy through the file provider): nativeCheckRomfs for it, its descriptor (closed here) read from its
+// own tables and System/Version.txt. false = the failure is set (nativeImportDone(6) follows)
+extern "C" JNIEXPORT jboolean JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidActivity_nativeCheckRomfsImage(JNIEnv *, jclass,
+                                                                                                              jint version, jint fd) {
+    char why[256] = "";
+    int r = romfs_check_image(version, fd, why, sizeof why);
+    close(fd);
+    if (r != ROMFS_SET_OK) fprintf(stderr, "[launcher] romfs.bin: %s\n", why);
+    return romfs_check_result(r, why, -1, "");
+}
+
+// The few files the runtime opens by path (keep_loose: the movies), out of a ready-made romfs.bin (its descriptor,
+// closed here) into this setup's romfs/. NULL, or why it failed.
+extern "C" JNIEXPORT jstring JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidActivity_nativeImageLoose(JNIEnv *env, jclass, jint fd) {
+    set_job("Taking the movies out of the game data...");
+    std::string romfs = setup_dest() + "/romfs";
+    mkdir(romfs.c_str(), 0755);
+    char why[256] = "";
+    bool ok = romfs_image_extract(fd, romfs.c_str(), keep_loose, why, sizeof why);
+    close(fd);
+    if (ok) return NULL;
+    fprintf(stderr, "[launcher] romfs.bin's movies: %s\n", why);
+    pthread_mutex_lock(&g_lock);
+    g_fail_detail = why;  // (nativeImportDone(5) follows)
+    pthread_mutex_unlock(&g_lock);
+    return env->NewStringUTF(why);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_com_botwrecompandroid_BOTWRecompAndroidActivity_nativeImportProgress(JNIEnv *, jclass, jlong done, jlong total) {
@@ -919,6 +998,10 @@ static void SDLCALL picked(void *, const char *const *files, int) {
 static const char *FONT_STD[] = {"nintendo_udsg-r_std_003.bfttf", "nintendo_udsg-r_std_003.ttf",
                                  "nintendo_udsgr_std_003.ttf", "nintendo_udsgr_std_003.bfttf"};
 static const char *FONT_EXT[] = {"nintendo_ext_003.bfttf", "nintendo_ext_003.ttf"};
+static const char *FONT_CJK[] = {"nintendo_udsg-r_org_zh-cn_003.bfttf", "nintendo_udsg-r_org_zh-cn_003.ttf",  // (pl.c)
+                                 "nintendo_udsg-r_ext_zh-cn_003.bfttf", "nintendo_udsg-r_ext_zh-cn_003.ttf",
+                                 "nintendo_udjxh-db_zh-tw_003.bfttf",   "nintendo_udjxh-db_zh-tw_003.ttf",
+                                 "nintendo_udsg-r_ko_003.bfttf",        "nintendo_udsg-r_ko_003.ttf"};
 static std::vector<std::string> g_font_picks;
 static std::string g_font_msg;
 
@@ -944,12 +1027,27 @@ static void import_fonts() {
     mkdir("fonts", 0755);
     int ok = 0, skipped = 0;
     for (auto &src : picks) {
-        std::string base = src.substr(src.find_last_of('/') + 1), low = base;
+        std::string base = src.substr(src.find_last_of('/') + 1), low;
+#ifdef __ANDROID__
+        // Android's dialog hands back content:// URIs, which end in a document id ("primary%3ADownload%2F..." or a
+        // number) and which fopen can't open: the name and the copy come through the activity (issue #122)
+        bool uri = !src.compare(0, 10, "content://");
+        if (uri) base = android_document_name(src);
+#endif
+        low = base;
         for (auto &c : low) c = (char)tolower(c);
         bool known = false;
         for (auto n : FONT_STD) known |= low == n;
         for (auto n : FONT_EXT) known |= low == n;
+        for (auto n : FONT_CJK) known |= low == n;
         if (!known) { skipped++; continue; }
+#ifdef __ANDROID__
+        if (uri) {
+            char cwd[1024];
+            if (getcwd(cwd, sizeof cwd) && android_copy_document(src, std::string(cwd) + "/fonts/" + low)) ok++;
+            continue;
+        }
+#endif
         FILE *in = fopen(src.c_str(), "rb"), *out = fopen(("fonts/" + low).c_str(), "wb");
         if (in && out) {
             char buf[65536];
@@ -967,6 +1065,7 @@ static void import_fonts() {
 static void remove_fonts() {
     for (auto n : FONT_STD) unlink((std::string("fonts/") + n).c_str());
     for (auto n : FONT_EXT) unlink((std::string("fonts/") + n).c_str());
+    for (auto n : FONT_CJK) unlink((std::string("fonts/") + n).c_str());
     g_font_msg = "Imported fonts removed: the substitute font is used.";
 }
 
@@ -2008,10 +2107,10 @@ static void prelaunch_tab(float sc) {
         // LASRecompAndroid's, with BOTW's in-place reads of draw targets)
         bool changed = false;
         const bool a8 = vk_adreno_8xx(vk_gpu_name());  // (Automatic: on for Adreno 8xx only)
-        auto tri = [&](const char *id, int *v) {  // Automatic / On / Off: -1 / 1 / 0
+        auto tri = [&](const char *id, int *v, bool auto_on) {  // Automatic / On / Off: -1 / 1 / 0; auto_on: Automatic's choice
             bool ch = false;
             ImGui::PushID(id);
-            ch |= ImGui::RadioButton(tr(a8 ? "Automatic (on for this GPU)" : "Automatic (off for this GPU)"), v, -1);
+            ch |= ImGui::RadioButton(tr(auto_on ? "Automatic (on for this GPU)" : "Automatic (off for this GPU)"), v, -1);
             ImGui::SameLine();
             ch |= ImGui::RadioButton(tr("On"), v, 1);
             ImGui::SameLine();
@@ -2028,21 +2127,21 @@ static void prelaunch_tab(float sc) {
             ImGui::TextDisabled("%s", tr("These options are for Turnip: the driver in use takes the safer paths anyway."));
         ImGui::Spacing();
         ImGui::Text("%s", tr("Game memory on the GPU (Turnip)"));
-        changed |= tri("heap", &g_settings.gpu_heap);
+        changed |= tri("heap", &g_settings.gpu_heap, vk_turnip_heap_on(-1));  // (any Turnip that places it)
         ImGui::TextDisabled("%s", tr("On: the game's memory is mapped straight into the GPU's, the fastest way. Off: what each "
                                   "frame uses is copied instead - it draws right where the fast way doesn't, but this game "
                                   "runs at about half the frame rate (15 fps instead of 35 on an Adreno 830). Automatic: on "
-                                  "for Adreno 8xx GPUs, off for the others - on another Adreno, try On first. Applies when "
-                                  "the game starts."));
+                                  "wherever Turnip can map it - without it an Adreno 7xx shows no text. Applies when the "
+                                  "game starts."));
         ImGui::Spacing();
         ImGui::Text("%s", tr("Draw-target reads in place (Turnip)"));
-        changed |= tri("inplace", &g_settings.inplace_reads);
+        changed |= tri("inplace", &g_settings.inplace_reads, a8);
         ImGui::TextDisabled("%s", tr("On: decals and effects read the image they draw on as it is, the fastest way. Off: a copy "
                                   "of it each time, slower (fewer fps) but by the Vulkan rules. Automatic: on for Adreno 8xx "
                                   "GPUs, off for the others. Applies when the game starts."));
         ImGui::Spacing();
         ImGui::Text("%s", tr("Turnip low-resolution Z (LRZ)"));
-        changed |= tri("lrz", &g_settings.turnip_lrz);
+        changed |= tri("lrz", &g_settings.turnip_lrz, a8);
         ImGui::TextDisabled("%s", tr("Turnip's early depth test, a little faster. Off can fix missing or broken drawing on "
                                   "some Adreno GPUs. Automatic: on for Adreno 8xx GPUs, off for the others. Applies when "
                                   "BOTWRecompAndroid restarts."));
@@ -2750,7 +2849,7 @@ extern "C" void launcher_run(const char *root) {
                     dl->AddLine(ImVec2(x, cy), ImVec2(x + u * 0.35f, cy + u * 0.35f), g, fs * 0.11f);
                     dl->AddLine(ImVec2(x + u * 0.35f, cy + u * 0.35f), ImVec2(x + u, cy - u * 0.4f), g, fs * 0.11f);
                 };
-                std::string src_d = tr("The folder with your own game folders (exefs/romfs) of The Legend of Zelda: Breath of "
+                std::string src_d = tr("The folder with your own game folders (exefs/romfs, or exefs and a romfs.bin) of The Legend of Zelda: Breath of "
                                        "the Wild for Nintendo Switch: version 1.0.0, 1.6.0, 1.8.2 or 1.9.0 (the last two in "
                                        "Brazilian Portuguese). The version is told from the files, and each one is set up in a place of "
                                        "its own, beside the others. The game isn't included with BOTWRecompAndroid.");

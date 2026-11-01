@@ -15,9 +15,12 @@
 #include <libavutil/time.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
+#include <dirent.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <unistd.h>
 
 #include "../hle.h"
 #include "../settings.h"
@@ -270,10 +273,47 @@ static void ex_set_data_source(Cpu *c) {
         if (slash) snprintf(host, sizeof host, "%.*s/romfs/%s", (int)(slash - aoc), aoc, rel ? rel : "");
     }
     LOG("[movie] open %s -> %s\n", path ? path : "(null)", host);
+    if (getenv("LARECOMP_MOVIE_MISSING") && strstr(host, getenv("LARECOMP_MOVIE_MISSING")) && strrchr(host, '/'))
+        snprintf(strrchr(host, '/') + 1, 16, "missing.webm");  // (test: a movie the dump lacks)
+    else if (access(host, R_OK) != 0) {  // (a player's own romfs/ used in place: its names' case may differ - Android minds)
+        char *slash = strrchr(host, '/');
+        DIR *dir = NULL;
+        if (slash) { *slash = 0; dir = opendir(host); *slash = '/'; }
+        for (struct dirent *de; dir && (de = readdir(dir));)
+            if (!strcasecmp(de->d_name, slash + 1)) {
+                snprintf(slash + 1, sizeof host - (size_t)(slash + 1 - host), "%s", de->d_name);
+                LOG("[movie] found as %s\n", host);
+                break;
+            }
+        if (dir) closedir(dir);
+    }
+    bool stand_in = false;
     if (avformat_open_input(&e->fmt, host, NULL, NULL) < 0 || avformat_find_stream_info(e->fmt, NULL) < 0) {
-        LOG("[movie] cannot open %s\n", host);
-        c->x[0] = 1;
-        return;
+        // A movie that isn't there crashed the game (#113: the Zora's Domain cutscene, a dump used in place): an
+        // error, or no video track (tried: a null object at +0x188), are things it never sees on the Switch. In its
+        // place, another movie of the same folder from its last moments: a video track that ends at once.
+        if (e->fmt) avformat_close_input(&e->fmt);
+        char *slash = strrchr(host, '/');
+        DIR *dir = NULL;
+        if (slash) { *slash = 0; dir = opendir(host); *slash = '/'; }
+        for (struct dirent *de; dir && (de = readdir(dir));) {
+            size_t n = strlen(de->d_name);
+            if (n < 5 || strcasecmp(de->d_name + n - 5, ".webm")) continue;
+            char other[1024];
+            snprintf(other, sizeof other, "%.*s/%s", (int)(slash - host), host, de->d_name);
+            if (avformat_open_input(&e->fmt, other, NULL, NULL) >= 0 && avformat_find_stream_info(e->fmt, NULL) >= 0) {
+                LOG("[movie] cannot open %s: %s in its place, from its end\n", host, de->d_name);
+                stand_in = true;
+                break;
+            }
+            if (e->fmt) avformat_close_input(&e->fmt);
+        }
+        if (dir) closedir(dir);
+        if (!stand_in) {
+            LOG("[movie] cannot open %s, nor any movie beside it\n", host);
+            c->x[0] = 1;
+            return;
+        }
     }
     e->pkt = av_packet_alloc();
     e->ntracks = 0;
@@ -284,6 +324,8 @@ static void ex_set_data_source(Cpu *c) {
         if (e->fmt->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO ||
             (e->fmt->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && g_settings.movie_audio && !getenv("LARECOMP_NO_MOVIE_AUDIO")))
             e->map[e->ntracks++] = (int)i;
+    if (stand_in && e->fmt->duration > 500000)  // (from the keyframe before its last 0.3 s)
+        av_seek_frame(e->fmt, -1, e->fmt->duration - 300000, AVSEEK_FLAG_BACKWARD);
     c->x[0] = 0;
 }
 
