@@ -22,10 +22,8 @@
 #define JUMP_RESERVE ((sizeof(CmdRec) + SHADOW_K - 1) / SHADOW_K)  // (game bytes) the chaining jump at a chunk's end
 
 static NvnCmdBuf *cb_of(uint64_t guest) { return HOST(NvnCmdBuf, guest); }
-static void shadow_init(void);
 
 NVN(nvnCommandBufferInitialize) {
-    shadow_init();
     NvnCmdBuf *cb = calloc(1, sizeof *cb);
     cb->guest = A(0);
     SET_HOST(A(0), cb);
