@@ -169,7 +169,7 @@ Donating is optional and gives no benefit: no features, priority, support or spe
 of this modification, not to mamcjr, peiikai or Nintendo. To support the original project, use the **Sponsor** button on
 [mamcjr's repository](https://github.com/mamcjr/BOTWRecompAndroid).
 
-Pix (random key): `CHAVE-PIX`
+Pix (random key): `5eb148c4-81dc-47cd-b2cc-b3171d3c06ab`
 
 ## Building
 

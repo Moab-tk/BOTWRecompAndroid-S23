@@ -174,7 +174,7 @@ A doação é opcional e não dá nenhum benefício: nada de recursos, prioridad
 Moab, autor desta modificação, e não para mamcjr, peiikai ou a Nintendo. Para apoiar o projeto original, use o botão
 **Sponsor** do [repositório de mamcjr](https://github.com/mamcjr/BOTWRecompAndroid).
 
-Pix (chave aleatória): `CHAVE-PIX`
+Pix (chave aleatória): `5eb148c4-81dc-47cd-b2cc-b3171d3c06ab`
 
 ## Compilando
 
