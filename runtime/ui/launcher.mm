@@ -1592,6 +1592,12 @@ static void prelaunch_rows(float sc) {
                 desc = std::string(tr("For the Snapdragon 8 Gen 2 with Samsung's One UI, as the Galaxy S23. On other phones it can make the screen flicker.")) + "\n\n" + desc;
             else if (f == "Turnip-v27.0.0-20261025-r5.zip")
                 desc = std::string(tr("For the Snapdragon 8 Gen 2 and other Adreno 6xx and 7xx GPUs. If the screen flickers on a Galaxy S23, use the One UI one.")) + "\n\n" + desc;
+            else if (f == "Turnip-v27.0.0-20261101-r4-8G2-OneUI.zip")
+                desc = std::string(tr("A newer build of the driver for the Snapdragon 8 Gen 2 with Samsung's One UI. Not tested on this game: the recommended one is the tested one.")) + "\n\n" + desc;
+            else if (f == "Turnip-v27.0.0-20261101-r4.zip")
+                desc = std::string(tr("A newer build of the driver for Adreno 6xx and 7xx GPUs. Not tested on this game: the recommended one is the tested one.")) + "\n\n" + desc;
+            else if (f == "Turnip-v27.0.0-20261101-r4-A8xx.zip")
+                desc = std::string(tr("An experimental driver for Adreno 8xx GPUs, as the Snapdragon 8 Elite. Not tested on this game.")) + "\n\n" + desc;
             std::string label = driver_shown(f);
             if (f == recommended) label += std::string(" - ") + tr("Recommended");
             if (opt_radio(label.c_str(), f == active, desc.c_str())) pick(f);
@@ -1739,6 +1745,9 @@ static void prelaunch_rows(float sc) {
                    "SavageWindRecomp, by Revivedx. LASRecomp-Android-Plus, by Nycolazs. The zeldaret/botw decompilation and "
                    "open-ead/sead. AMD FSR 1, Snapdragon GSR and SMAA. "
                    "libadrenotools. Mesa's Turnip driver, in The412Banner's builds.");
+        opt_action("Licenses", "",
+                   "This app's MIT license and the list of the other components' licenses are inside the APK, in "
+                   "assets/licenses, and in the source code.");
         opt_action("About this version", "Unofficial",
                    "An unofficial modification for the Samsung Galaxy S23, made with AI from one person's ideas. It isn't made "
                    "or supported by the original authors, so please don't take its problems to them. Don't take it too "

@@ -1279,7 +1279,7 @@ static uint32_t g_present_id;
 static uint64_t present_lock(uint64_t want) {
     static int env = -2;
     if (env == -2) env = getenv("LARECOMP_PRESENT_LOCK") ? atoi(getenv("LARECOMP_PRESENT_LOCK")) != 0 : -1;
-    if (env >= 0 ? !env : !steady_frames()) return want;
+    if (!g_vk.display_timing || (env >= 0 ? !env : !steady_frames())) return want;
     extern uint64_t framepace_period_ns(void);
     static uint64_t anchor, target, refresh;
     static uint32_t n, cuts;
