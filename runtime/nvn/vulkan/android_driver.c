@@ -16,7 +16,7 @@
 #include "../../settings.h"
 #include "vk.h"
 
-// (S23) Settings > Files > Tests: the GPU doesn't rest between frames (adrenotools_set_turbo, Eden's "force max clock").
+// (S23) Settings > Video > Tests: the GPU doesn't rest between frames (adrenotools_set_turbo, Eden's "force max clock").
 // The state is the kernel's, for the whole phone: it outlives the app. So it follows the app being in front (onPause /
 // onResume), goes off on the way out and in the crash handler, and every start clears what a killed run left. The same
 // call as adrenotools', for the kernel's answer; open / ioctl / close only: safe in a signal handler.

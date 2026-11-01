@@ -1311,7 +1311,7 @@ static VkSampler make_sampler(const NvnSamplerDesc *d, bool compare) {
     si.mipLodBias = d->lod_bias;
     if (d->max_aniso > 1) { si.anisotropyEnable = VK_TRUE; si.maxAnisotropy = fminf(d->max_aniso, 16); }
 #ifdef __ANDROID__
-    // (S23) Settings > Files > Tests: only where it means anything, textures with mipmaps filtered both ways
+    // (S23) Settings > Video > Tests: only where it means anything, textures with mipmaps filtered both ways
     if (g_settings.force_aniso > 0 && mf > 1 && !d->compare_mode && si.minFilter == VK_FILTER_LINEAR && si.magFilter == VK_FILTER_LINEAR) {
         si.maxAnisotropy = (float)(1 << (g_settings.force_aniso - 1));
         si.anisotropyEnable = si.maxAnisotropy > 1;

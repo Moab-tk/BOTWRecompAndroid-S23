@@ -1096,7 +1096,7 @@ static void translate_program(void *arg);
 static void compile_program(void *arg);
 static void build_pipeline(void *arg);
 enum { BUILD_TRANSLATE, BUILD_COMPILE, BUILD_PIPE, BUILD_OTHER, BUILD_KINDS };
-static _Atomic int stat_build_n[BUILD_KINDS], stat_build_total[BUILD_KINDS], stat_taken, stat_same_code;
+static _Atomic int stat_build_n[BUILD_KINDS], stat_build_total[BUILD_KINDS], stat_taken;
 static _Atomic uint64_t stat_build_ns[BUILD_KINDS], stat_build_worst[BUILD_KINDS];
 static void job_run(Job *j) {
     int kind = j->fn == translate_program ? BUILD_TRANSLATE : j->fn == compile_program ? BUILD_COMPILE :
@@ -1223,7 +1223,7 @@ static void run_job(void (*fn)(void *), void *arg) {
         const char *workers = getenv("LARECOMP_SHADER_WORKERS");
         if (workers) n = atoi(workers);
 #ifdef __ANDROID__
-        else if (g_settings.shader_workers > 0) n = g_settings.shader_workers;  // (S23: Settings > Files > Tests)
+        else if (g_settings.shader_workers > 0) n = g_settings.shader_workers;  // (S23: Settings > Video > Tests)
 #endif
         if (n < 1) n = 1;
         if (n > 16) n = 16;
@@ -1423,8 +1423,8 @@ const char *renderer_stats(void) {
             for (Job *j = tjobs_head; j; j = j->next) tqueued++;
             pthread_mutex_unlock(&tjobs_lock);
             LOG("[vk] builds: translate %d %.0fms worst %.0f, compile %d %.0fms worst %.0f, pipeline %d %.0fms worst %.0f, other %d %.0fms; "
-                "same code %d, taken %d, queued %d+%d; total %d/%d/%d\n", n[0], ms[0], worst[0], n[1], ms[1], worst[1], n[2], ms[2], worst[2],
-                n[3], ms[3], atomic_exchange(&stat_same_code, 0), atomic_exchange(&stat_taken, 0), tqueued, queued,
+                "taken %d, queued %d+%d; total %d/%d/%d\n", n[0], ms[0], worst[0], n[1], ms[1], worst[1], n[2], ms[2], worst[2],
+                n[3], ms[3], atomic_exchange(&stat_taken, 0), tqueued, queued,
                 atomic_load(&stat_build_total[0]), atomic_load(&stat_build_total[1]), atomic_load(&stat_build_total[2]));
         }
     }
@@ -2633,18 +2633,6 @@ static void translate_program(void *arg) {
             LOG("[shader] patch %llx %s (code %llx): \"%s\" -> \"%s\"\n", lh, st, (unsigned long long)p->code[0], from, to);
         }
         if (f) fclose(f);
-    }
-#endif
-#ifdef __ANDROID__
-    {   // (S23, measuring) the same two translated shaders under another address: work a table by content would save
-        static uint64_t seen[32768];
-        uint64_t h = hmix(1469598103934665603ull, p->vi->msl, strlen(p->vi->msl));
-        h = hmix(h, p->fi->msl, strlen(p->fi->msl));
-        if (!h) h = 1;
-        uint32_t s = (uint32_t)(h ^ (h >> 31)) & 32767;
-        for (int i = 0; i < 64 && seen[s] && seen[s] != h; i++) s = (s + 1) & 32767;
-        if (seen[s] == h) atomic_fetch_add(&stat_same_code, 1);
-        else seen[s] = h;
     }
 #endif
     p->vs_uses_vid = strstr(p->vi->msl, "gl_VertexIndex") != NULL;
