@@ -1880,7 +1880,7 @@ static void recommended_apply(bool lighter) {
     g_settings.shader_int32 = true;
     g_settings.sync_lag = true;
     g_settings.native_code = true;
-    g_settings.gpu_heap = g_settings.inplace_reads = g_settings.turnip_lrz = 1;
+    g_settings.gpu_heap = g_settings.inplace_reads = g_settings.turnip_lrz = -1;  // (Automatic: on on the 740, as tested; safe on the others)
     g_settings.gpu_turbo = false;
     g_settings.present_fifo = true;
     g_settings.panel_lock = true;

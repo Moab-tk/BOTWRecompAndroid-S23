@@ -21,7 +21,7 @@ android {
         applicationId = "com.botwrecomp.android.s23"
         minSdk = 30
         targetSdk = 36
-        versionCode = 39
+        versionCode = 41
         versionName = "0.2.10-s23-b9"
         ndk {
             abiFilters += "arm64-v8a"
@@ -77,7 +77,7 @@ android {
             isMinifyEnabled = false
             // (S23: sempre a chave fixa, a mesma da b1 - sem ela o release não é montado, para nunca sair com outra chave)
             signingConfig = signingConfigs.findByName("release")
-                ?: throw GradleException("chave fixa ausente: ${releaseKey} (ver E:/Projetos/BOTW/chave)")
+                ?: throw GradleException("chave fixa ausente: ${releaseKey}")
         }
     }
 

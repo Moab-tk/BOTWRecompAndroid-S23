@@ -16,8 +16,6 @@
 #include "device_compat.h"
 #include "../output_scale.h"
 #include "../renderer.h"
-#ifdef __ANDROID__
-#endif
 
 VkG g_vk;
 static SDL_Window *window;
@@ -908,7 +906,7 @@ static VkPresentModeKHR present_mode(void) {
     // 60). No tearing. LARECOMP_VK_PRESENT=fifo|immediate|mailbox to choose.
     const char *e = getenv("LARECOMP_VK_PRESENT");
 #ifdef __ANDROID__
-    if (!e && g_settings.present_fifo) e = "fifo";  // (S23: Settings > Files > Tests)
+    if (!e && g_settings.present_fifo) e = "fifo";  // (S23: Settings > Video > Tests)
 #endif
     VkPresentModeKHR want = !e || !strcmp(e, "mailbox") ? VK_PRESENT_MODE_MAILBOX_KHR
                           : !strcmp(e, "immediate") ? VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR;
@@ -1046,6 +1044,7 @@ static void recreate_swapchain(void) {
 // when it comes back): the Vulkan surface and swapchain are made again for the new window. Frames in between are
 // skipped. Before this, everything after a trip to the background stayed black (every acquire: SURFACE_LOST).
 static struct ANativeWindow *surface_aw;  // the window g_vk.surface was made for
+static struct ANativeWindow *rate_aw;     // the window android_set_frame_rate told Android about
 
 static struct ANativeWindow *android_window(void) {
     return SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
@@ -1055,6 +1054,7 @@ static void android_create_surface(struct ANativeWindow *aw) {
     VkAndroidSurfaceCreateInfoKHR si = {.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR, .window = aw};
     VK_CHECK(vkCreateAndroidSurfaceKHR(g_vk.inst, &si, NULL, &g_vk.surface));
     surface_aw = aw;
+    rate_aw = NULL;  // (Android can hand a new window at the old one's address: ask again)
 }
 
 // (S23) The window's frame rate told to Android (the pace's: 30 or 60). A test, off by default: with it the Galaxy S23
@@ -1065,10 +1065,10 @@ static void android_create_surface(struct ANativeWindow *aw) {
 #include <android/native_window.h>
 extern int framepace_target(void);
 
-// (S23) Settings > Files > Steady frames at 30 FPS: the panel at 60 Hz, frames held to its refreshes (present_lock).
+// (S23) Settings > Video > Steady frames at 30 FPS: the panel at 60 Hz, frames held to its refreshes (present_lock).
 // Galaxy S23 Ultra, 5 minutes playing: frames shown on time 96% (the screen left alone: 93%, with one dropped a second)
 static bool steady_frames(void) {
-    return g_settings.panel_lock && framepace_target() == 30;
+    return g_settings.panel_lock && g_settings.fps_mode == 1 && framepace_target() == 30;
 }
 
 static void android_set_frame_rate(void) {
@@ -1077,11 +1077,10 @@ static void android_set_frame_rate(void) {
     if (panel < 0) panel = getenv("LARECOMP_PANEL_HZ") ? atoi(getenv("LARECOMP_PANEL_HZ")) : 0;
     int hz = panel > 0 ? panel : steady_frames() ? 60 : 0;
     if ((!on && hz <= 0) || !surface_aw || android_window() != surface_aw) return;  // (the window it was made for, still alive)
-    static struct ANativeWindow *set_aw;
     static int set_fps = -1;
     int fps = hz > 0 ? hz : framepace_target();
-    if (surface_aw == set_aw && fps == set_fps) return;
-    set_aw = surface_aw, set_fps = fps;
+    if (surface_aw == rate_aw && fps == set_fps) return;
+    rate_aw = surface_aw, set_fps = fps;
     int r = ANativeWindow_setFrameRate(surface_aw, fps > 0 ? (float)fps : 0.0f,
                                        hz > 0 ? ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT
                                               : ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
@@ -1292,7 +1291,8 @@ static uint64_t present_lock(uint64_t want) {
     if (!(n & 127)) {
         VkRefreshCycleDurationGOOGLE d;
         if (vkGetRefreshCycleDurationGOOGLE(g_vk.dev, g_vk.swapchain, &d) == VK_SUCCESS && d.refreshDuration) {
-            if (refresh != d.refreshDuration) LOG("[present] lock: a refresh is %.3f ms\n", d.refreshDuration / 1e6);
+            if (llabs((long long)refresh - (long long)d.refreshDuration) > 500000)  // (0.5 ms: the measure itself moves a little)
+                LOG("[present] lock: a refresh is %.3f ms\n", d.refreshDuration / 1e6);
             refresh = d.refreshDuration;
         }
     }
@@ -1898,7 +1898,7 @@ bool vk_turnip_heap_on(int setting) {
 static bool g_lrz_at_start = true;
 static bool g_fifo_at_start;
 static int g_turnip_mode_at_start;
-bool vk_tests_changed(void) {  // (S23: Settings > Files > Tests read when the app starts)
+bool vk_tests_changed(void) {  // (S23: Settings > Video > Tests read when the app starts)
     return g_settings.present_fifo != g_fifo_at_start || g_settings.turnip_mode != g_turnip_mode_at_start;
 }
 bool vk_lrz_at_start(void) { return g_lrz_at_start; }  // (the start screen: a change needs a restart)
@@ -1935,7 +1935,7 @@ void ui_window_init(void) {
         }
         g_lrz_at_start = lrz != 0;
         if (!getenv("TU_DEBUG")) {
-            static const char *const modes[] = {"", "gmem", "sysmem", "noubwc"};  // (S23: Settings > Files > Tests)
+            static const char *const modes[] = {"", "gmem", "sysmem", "noubwc"};  // (S23: Settings > Video > Tests)
             const char *mode = modes[g_settings.turnip_mode];
             char debug[32];
             snprintf(debug, sizeof debug, "%s%s%s", lrz ? "" : "nolrz", !lrz && *mode ? "," : "", mode);

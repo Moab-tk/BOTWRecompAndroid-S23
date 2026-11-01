@@ -342,9 +342,14 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
         }, "driver").start();
     }
 
-    private void dropCustomDriver() {
-        deleteTree(new File(getExternalFilesDir(null), "drivers"));
-        deleteTree(new File(getFilesDir(), "drivers"));
+    private void dropCustomDriver() {  // (S23: the system's is picked; the packages stay on the list)
+        File dir = new File(getExternalFilesDir(null), "drivers");
+        dir.mkdirs();
+        try (OutputStream o = new FileOutputStream(new File(dir, "active.txt"))) {
+            o.write("-".getBytes());
+        } catch (IOException e) {
+            Log.e(TAG, "driver: " + e);
+        }
     }
 
     // The app icon's long-press shortcut (res/xml/shortcuts.xml): the system driver, settings out of reach or not - a
@@ -1201,6 +1206,7 @@ public class BOTWRecompAndroidActivity extends SDLActivity {
             if (c != null && c.moveToFirst() && !c.isNull(0)) name = c.getString(0);
         } catch (Exception ignored) {
         }
+        name = new File(name).getName();  // (the provider's to give: never a path)
         if (!DRIVER_FILE.matcher(name).find()) return "";
         try {
             File dir = new File(ctx.getExternalFilesDir(null), "drivers");  // (S23: the ones before stay, to pick from)
