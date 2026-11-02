@@ -114,6 +114,8 @@ typedef struct TexBackend {
     VkImageAspectFlags aspect;
     bool gpu_owned, uploaded, dynamic;
     uint64_t data_hash, sample_hash, checked_frame, full_frame;
+    uint64_t dyn_sample;           // (a large dynamic texture's sample between full hashes: textures.c upload_texture)
+    uint32_t same_run;             // (its full hashes in a row that found no change)
     uint32_t wgen;  // page write tracking generation at the last upload check (textures.c)
     bool scalable, presented;
     uint8_t rs_group;  // RS_*: which output scale its allocation follows (textures.c)

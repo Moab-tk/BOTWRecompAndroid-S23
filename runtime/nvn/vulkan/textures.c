@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "../../settings.h"
+#include "../tex_hash.h"
 #include "vk.h"
 #include "../astc.h"
 #include "../renderer.h"
@@ -869,15 +870,33 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
         }
     }
     if (b->uploaded && b->dynamic && !always_full && !restyle && !periodic && texture_unchanged(b, mem, total)) return;
+    bool fast = tex_fast_hash();  // (runtime/nvn/tex_hash.h, from TOTKDroid; LARECOMP_TEX_FASTHASH=0: the previous hashes)
+    // (from TOTKDroid) A large dynamic texture seen unchanged DYN_CALM full hashes in a row: hashed whole only every
+    // dyn_every frames (spread by its address), and sampled in between - a sample that differs hashes it whole at once.
+    // Without page write tracking (the placed heap) those were hashed whole every frame. Never the terrain's tiles
+    // (always). LARECOMP_TEX_DYN_EVERY=<n> (1: every frame, as before); LARECOMP_AB=<frames>:texcalm alternates it.
+    enum { DYN_CALM = 30, DYN_LARGE = 2 << 20 };
+    static int dyn_every = -1;
+    if (dyn_every < 0) dyn_every = getenv("LARECOMP_TEX_DYN_EVERY") ? atoi(getenv("LARECOMP_TEX_DYN_EVERY")) : 4;
+    extern int vk_ab(const char *what);
+    bool calm = fast && dyn_every > 1 && b->dynamic && b->uploaded && total >= DYN_LARGE && b->same_run >= DYN_CALM &&
+                !restyle && !always_full && !always && vk_ab("texcalm") != 0;
+    if (calm && (frame + ((uintptr_t)b >> 6)) % (uint64_t)dyn_every && tex_hash_sample(mem, total) == b->dyn_sample) return;
     if (!full && !restyle) {
         prof_tex_samples++;
-        uint64_t sh = fnv_sample(mem, total);
+        uint64_t sh = fast ? tex_hash_sample(mem, total) : fnv_sample(mem, total);
         if (sh == b->sample_hash) return;
     }
     prof_tex_full++; prof_tex_full_bytes += total; if (b->dynamic) prof_tex_dyn++;
-    uint64_t h = hash_full(mem, total), last_full = b->full_frame, old_sample = b->sample_hash;
+    uint64_t h = fast ? tex_hash_full(mem, total) : hash_full(mem, total), last_full = b->full_frame, old_sample = b->sample_hash;
     b->full_frame = frame;
-    b->sample_hash = fnv_sample(mem, total);
+    // (the sample is only compared while the texture isn't dynamic, and a dynamic one stays so: none for those)
+    if (!fast) b->sample_hash = fnv_sample(mem, total);
+    else if (!b->dynamic && !(b->uploaded && h != b->data_hash)) b->sample_hash = tex_hash_sample(mem, total);
+    if (b->dynamic && total >= DYN_LARGE && fast) {
+        b->same_run = b->uploaded && h == b->data_hash ? (b->same_run < 0xFFFF ? b->same_run + 1 : b->same_run) : 0;
+        b->dyn_sample = tex_hash_sample(mem, total);
+    }
     if (b->uploaded && h == b->data_hash && !restyle) return;
     if (b->uploaded && h != b->data_hash && !b->dynamic && !always_full) {
         // LARECOMP_LOG_TEX_MISS=1 (diagnosis): a change the sampled check didn't see, found by the periodic full hash -
