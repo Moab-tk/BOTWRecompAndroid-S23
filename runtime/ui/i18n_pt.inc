@@ -550,6 +550,8 @@
  "Sobre esta versão"},
 {"Unofficial",
  "Não oficial"},
+{"An unofficial modification for Android phones, made with AI from one person's ideas. It was only tested on a Samsung Galaxy S23 Ultra, so it may run worse on other phones. It isn't made or supported by the original authors, so please don't take its problems to them. Don't take it too seriously: if it doesn't work for you, just leave it and download the version you like best.",
+ "Uma modificação não oficial para celulares Android, feita com IA a partir das ideias de uma pessoa. Só foi testada em um Samsung Galaxy S23 Ultra, então pode rodar pior em outros celulares. Não é feita nem tem suporte dos autores originais, por isso não leve os problemas dela até eles. Não leve muito a sério: se não funcionar para você, é só deixar de lado e baixar a versão de que mais gostar."},
 {"An unofficial modification for the Samsung Galaxy S23, made with AI from one person's ideas. It isn't made or supported by the original authors, so please don't take its problems to them. Don't take it too seriously: if it doesn't work for you, just leave it and download the version you like best.",
  "Uma modificação não oficial para o Samsung Galaxy S23, feita com IA a partir das ideias de uma pessoa. Não é feita nem tem suporte dos autores originais, então não leve problemas dela até eles. Não leve nada a sério: se não der certo para você, é só deixar para lá e baixar a versão que achar melhor."},
 {"Unofficial modification of BOTWRecompAndroid, by mamcjr",

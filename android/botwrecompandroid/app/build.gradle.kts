@@ -11,6 +11,9 @@ val gen = layout.buildDirectory.dir("generated/botwrecompandroid")
 // The release key: outside the repository, in ~/.botwrecompandroid/keystore.properties (storeFile, storePassword, keyAlias,
 // keyPassword); without it, release builds are signed with the debug key
 val releaseKey: File = File(System.getProperty("user.home"), ".botwrecompandroid/keystore.properties")
+// (S23) Two versions of the same code: by default the one for the Snapdragon 8 Gen 2; -Puniversal=1 the one for every phone
+// (cpp/CMakeLists.txt S23_CPU). The same package, so one installs over the other and keeps the game files and the saves.
+val universal = providers.gradleProperty("universal").isPresent
 
 android {
     namespace = "com.botwrecompandroid"
@@ -22,13 +25,15 @@ android {
         minSdk = 30
         targetSdk = 36
         versionCode = 42
-        versionName = "0.2.10-s23-b10"
+        versionName = if (universal) "0.2.11-universal-b10" else "0.2.11-s23-b10"
+        manifestPlaceholders["appLabel"] = if (universal) "BOTW Universal" else "BOTW S23"
         ndk {
             abiFilters += "arm64-v8a"
         }
         externalNativeBuild {
             cmake {
                 arguments += "-DBOTW_GEN_DIR=${gen.get().asFile.resolve("inc").absolutePath.replace('\\', '/')}"
+                if (universal) arguments += "-DS23_CPU=OFF"
             }
         }
     }
