@@ -1356,6 +1356,12 @@ static void set_shaders(Cpu *c, int stride) {
         p->stages[stage].const_size = *(const uint32_t *)(control + 0x6FC);
         p->stage_mask |= 1u << stage;
     }
+#ifdef __ANDROID__
+    {   // (S23) a program the game sets up as it loads: its pipelines from earlier runs made ahead (vulkan/exec.c)
+        extern void vk_prewarm_program(const NvnProgram *np);
+        vk_prewarm_program(p);
+    }
+#endif
     RET(1);
 }
 
