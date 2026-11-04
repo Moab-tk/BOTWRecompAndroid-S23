@@ -1,7 +1,7 @@
 # O que mudou em relação ao original
 
 Projeto original: [BOTWRecompAndroid](https://github.com/mamcjr/BOTWRecompAndroid), de mamcjr. As versões de b1 a b8 partem
-da `0.2.3-beta`, e a b9 parte da `0.2.10-beta`. A versão de cada etapa está no histórico do repositório.
+da `0.2.3-beta`, a b9 parte da `0.2.10-beta` e a b10 parte da `0.2.13-beta`. A versão de cada etapa está no histórico do repositório.
 
 ## Resumo por área
 
@@ -136,6 +136,28 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - Tudo da b8, sobre a `0.2.10-beta` de mamcjr.
 - Traz as correções do original até ela, como vídeos, sensor de movimento, texturas grandes e idiomas novos.
 - A tabela de comandos passa a ser a do original.
+
+### b10: junção com o original 0.2.13, revisão do código e montagem antecipada
+
+- Tudo da b9, sobre a `0.2.13-beta` de mamcjr: ícones de ação nos controles na tela, opção de 20 FPS, folhas no chão
+  corrigidas, nomes de cavalo com acento.
+- **Duas versões:** a S23, compilada para o processador do Snapdragon 8 Gen 2, e a Universal, para qualquer celular arm64
+  com Vulkan. Mesmo pacote: uma substitui a outra.
+- **Revisão do código inteiro**, com 50 pontos anotados. Corrigidos:
+  - os ícones de ação faziam o jogo fechar depois de umas 50 armas diferentes na mesma sessão (os lugares de textura do
+    menu acabavam);
+  - um programa de shader podia ser liberado enquanto a linha de desenho ainda usava;
+  - as esperas do jogo usavam o relógio do sistema e mudavam junto com a hora do celular;
+  - as configurações eram gravadas por cima do arquivo, sem cópia e sem trava: um fechamento no meio podia apagar tudo;
+  - uma espera de 10 s pela GPU fechava o app no Android; agora espera mais 10 s antes de desistir;
+  - o jogo aparecia por cima da tela de bloqueio sem senha (agora só com o arquivo de testes);
+  - o controle de temperatura podia baixar a imagem e nunca mais subir em celulares sem sensor do chip;
+  - textos das opções avançadas errados e 43 textos que apareciam em inglês.
+- **Montagem antecipada de pipelines:** o app guarda quais programas e pipelines o jogo usou
+  (`cache/known_pipelines.bin`). Quando o jogo carrega de novo um shader conhecido, eles são montados antes do primeiro
+  desenho, numa fila de baixa prioridade feita por um ajudante só. A primeira sessão depois de instalar só anota.
+- O cache de pipelines é gravado numa linha própria e não segura mais os toques a cada 30 s.
+- A limpeza das vistas de textura não percorre mais a tabela inteira quando a textura não tem vistas.
 
 ## O que não foi modificado
 

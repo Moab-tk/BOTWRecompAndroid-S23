@@ -1192,8 +1192,12 @@ static void worker_behind_game(void) {
 }
 #endif
 
+static _Atomic int g_worker_ids;
 static void *worker(void *a) {
     (void)a;
+    // (S23) Only the first worker takes jobs made ahead (known pipelines), one at a time with a pause: with all of them
+    // on it, the game ran at 19-23 fps for ~15 s after entering the world (2026-11-04, its CPU taken)
+    bool takes_low = atomic_fetch_add(&g_worker_ids, 1) == 0;
 #ifdef __ANDROID__
     worker_behind_game();
     {
@@ -1203,13 +1207,15 @@ static void *worker(void *a) {
 #endif
     for (;;) {
         pthread_mutex_lock(&jobs_lock);
-        while (!jobs_head && !ljobs_head) pthread_cond_wait(&jobs_cond, &jobs_lock);
-        Job **head = jobs_head ? &jobs_head : &ljobs_head, **tail = jobs_head ? &jobs_tail : &ljobs_tail;
+        while (!jobs_head && !(takes_low && ljobs_head)) pthread_cond_wait(&jobs_cond, &jobs_lock);
+        bool low = !jobs_head;
+        Job **head = low ? &ljobs_head : &jobs_head, **tail = low ? &ljobs_tail : &jobs_tail;
         Job *j = *head;
         *head = j->next;
         if (!*head) *tail = NULL;
         pthread_mutex_unlock(&jobs_lock);
         job_run(j);
+        if (low) usleep(2000);
     }
     return NULL;
 }
@@ -1232,12 +1238,14 @@ static void *translator(void *a) {
     for (;;) {
         pthread_mutex_lock(&tjobs_lock);
         while (!tjobs_head && !ltjobs_head) pthread_cond_wait(&tjobs_cond, &tjobs_lock);
-        Job **head = tjobs_head ? &tjobs_head : &ltjobs_head, **tail = tjobs_head ? &tjobs_tail : &ltjobs_tail;
+        bool low = !tjobs_head;
+        Job **head = low ? &ltjobs_head : &tjobs_head, **tail = low ? &ltjobs_tail : &tjobs_tail;
         Job *j = *head;
         *head = j->next;
         if (!*head) *tail = NULL;
         pthread_mutex_unlock(&tjobs_lock);
         job_run(j);
+        if (low) usleep(1000);  // (S23: a translation made ahead, then a pause - the game's own come first)
     }
     return NULL;
 }
@@ -1287,7 +1295,8 @@ static void run_job_q(void (*fn)(void *), void *arg, bool low) {
     Job **head = low ? &ljobs_head : &jobs_head, **tail = low ? &ljobs_tail : &jobs_tail;
     if (*tail) (*tail)->next = j; else *head = j;
     *tail = j;
-    pthread_cond_signal(&jobs_cond);
+    if (low) pthread_cond_broadcast(&jobs_cond);  // (only the first worker takes it: wake that one too)
+    else pthread_cond_signal(&jobs_cond);
     pthread_mutex_unlock(&jobs_lock);
 }
 
@@ -1332,7 +1341,7 @@ static void job_promote(void *arg) {
     pthread_mutex_unlock(&tjobs_lock);
     pthread_mutex_lock(&jobs_lock);
     j = job_unlink(&ljobs_head, &ljobs_tail, arg);
-    if (j) { if (jobs_tail) jobs_tail->next = j; else jobs_head = j; jobs_tail = j; }
+    if (j) { if (jobs_tail) jobs_tail->next = j; else jobs_head = j; jobs_tail = j; pthread_cond_signal(&jobs_cond); }
     pthread_mutex_unlock(&jobs_lock);
 }
 #ifdef __ANDROID__

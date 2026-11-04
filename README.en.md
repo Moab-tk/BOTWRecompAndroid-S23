@@ -41,7 +41,12 @@ extracted). No instructions on how to get it will be given.
 - **Built for the S23's processor**, without the instructions it doesn't have.
 - **Installs next to the original:** the package is different (`com.botwrecomp.android.s23`), so one doesn't replace the
   other.
-- **Based on version 0.2.10 of the original**, with mamcjr's fixes up to it.
+- **Based on version 0.2.13 of the original**, with mamcjr's fixes up to it, such as the action icons on the
+  on-screen controls.
+- **Two versions:** the S23 one, built for the Snapdragon 8 Gen 2's processor, and the Universal one, for any arm64 phone
+  with Vulkan. The Universal one is experimental: it was only tested on the S23.
+- **Fewer missing objects when entering areas:** the app remembers the pipelines the game used and builds them again before
+  the first draw. Entering the world, skipped draws went from 5,780 down to 132.
 - **Five Turnip drivers in the app**, in Settings > Files > Vulkan driver. The two tested ones show as Recommended, and
   the three newer ones show as not tested on this game.
 - **Steady frames at 30 FPS:** the screen stays at 60 Hz and each frame follows its real rhythm. In the measurements, 97%
@@ -119,6 +124,18 @@ original aspect ratio.
 On b9, standing still at the same spot and in the same save as b8, with the phone charging: 29.9 FPS against 29.8; 93.7% of
 frames on time against 90.8%; and 84.4 °C on the processor against 86.8 °C.
 
+On b10, two sessions in a row, in the same save and along the same route, with the temperature control on:
+
+| | Only recording | Building ahead |
+|---|---:|---:|
+| Average FPS | 29.8 | 29.7 |
+| Peak entering the world | 305 ms | 213 ms |
+| Skipped draws entering the world | 5,780 | 132 |
+| Skipped draws per minute | 461 | 106 |
+
+The chip stayed between 70 and 76 °C and the battery between 29 and 31 °C. The FPS drop right after entering the world,
+seen in this measurement, was fixed after it, and the fix wasn't measured.
+
 Each sample covers 2 seconds of play. Average FPS doesn't tell everything: it shows how many frames went out, not whether
 they reached the screen at a steady pace. This was measured by the system itself, on every frame shown:
 
@@ -143,6 +160,11 @@ game's own shorter draw distance on the whole map (3.5% fewer draws at the same 
   deeply on the S23 yet. If it happens, load a later save.
 - **Stutter in new areas:** on the first visit, a shader may take 250 to 300 ms to get ready. After that it stays on the
   phone, so later visits tend to be lighter.
+- **Building ahead:** the first session after installing a new version only records the pipelines. The gain shows from
+  the second one on. Right after entering the world, this building may still take some of the processor.
+- **Universal version:** only tested on the S23. On other phones, nothing was checked.
+- **Heat:** even with a cooler, the chip went over 70 °C and Android marked the phone as very hot. The temperature control
+  lowered the image in steps, as it should.
 - **GPU stuck at a low clock:** in some sessions the system lowered the GPU from 719 to about 300 MHz and only let go when
   the game closed, even with the chip at 60 °C. Both times it was measured, the tool that turns off the limiter wasn't
   running. If the game suddenly gets slow, close it and open it again.

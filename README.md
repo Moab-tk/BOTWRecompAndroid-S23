@@ -41,7 +41,12 @@ do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
 - **Compilada para o processador do S23**, sem as instruções que ele não tem.
 - **Instala ao lado do original:** o pacote é outro (`com.botwrecomp.android.s23`), então uma versão não substitui a
   outra.
-- **Baseada na versão 0.2.10 do original**, com as correções de mamcjr até ela.
+- **Baseada na versão 0.2.13 do original**, com as correções de mamcjr até ela, como os ícones de ação nos controles
+  na tela.
+- **Duas versões:** a S23, feita para o processador do Snapdragon 8 Gen 2, e a Universal, para qualquer celular arm64
+  com Vulkan. A Universal é experimental: só foi testada no S23.
+- **Menos objetos sumindo ao entrar nas áreas:** o app lembra os pipelines que o jogo usou e monta de novo antes do primeiro
+  desenho. Ao entrar no mundo, os desenhos pulados caíram de 5.780 para 132.
 - **Cinco drivers Turnip já no aplicativo**, em Configurações > Arquivos > Driver Vulkan. Os dois testados aparecem como
   Recomendado, e os três mais novos aparecem como não testados neste jogo.
 - **Configurações recomendadas com um toque:** as testadas no S23 Ultra e uma opção mais leve para o S23, o S23+ e
@@ -121,6 +126,18 @@ modificações, jogo na versão 1.8.2, código nativo, 30 FPS, resolução 1x. A
 Na b9, parado no mesmo lugar e no mesmo save da b8, com o celular carregando: 29,9 FPS contra 29,8; 93,7% dos quadros no
 tempo certo contra 90,8%; e 84,4 °C no processador contra 86,8 °C.
 
+Na b10, duas sessões seguidas, no mesmo save e no mesmo caminho, com o controle de temperatura ligado:
+
+| | Só anotando | Montando antes |
+|---|---:|---:|
+| FPS médio | 29,8 | 29,7 |
+| Pico ao entrar no mundo | 305 ms | 213 ms |
+| Desenhos pulados ao entrar no mundo | 5.780 | 132 |
+| Desenhos pulados por minuto | 461 | 106 |
+
+O chip ficou entre 70 e 76 °C e a bateria entre 29 e 31 °C. A queda de FPS logo depois de entrar no mundo, vista nessa
+medição, foi corrigida depois dela e a correção não foi medida.
+
 Cada medição cobre 2 segundos de jogo. O FPS médio não conta tudo: ele mostra quantos quadros saíram, não se chegaram à
 tela no ritmo certo. Isto foi medido pelo próprio sistema, em cada quadro mostrado:
 
@@ -147,6 +164,11 @@ GPU).
   não foi testada a fundo no S23. Se acontecer, carregue um save feito depois.
 - **Engasgadas em áreas novas:** na primeira visita, um shader pode levar de 250 a 300 ms para ficar pronto. Depois ele
   fica guardado no celular, então as próximas visitas tendem a ser mais leves.
+- **Montagem antecipada:** a primeira sessão depois de instalar uma versão nova só anota os pipelines. O ganho aparece da
+  segunda em diante. Logo depois de entrar no mundo, essa montagem ainda pode ocupar um pouco do processador.
+- **Versão Universal:** só foi testada no S23. Em outros celulares, nada foi conferido.
+- **Calor:** mesmo com cooler, o chip passou de 70 °C e o Android marcou o celular como muito quente. O controle de
+  temperatura baixou a imagem em degraus, como deve.
 - **GPU presa em frequência baixa:** em algumas partidas, o sistema baixou a GPU de 719 para cerca de 300 MHz e só soltou
   com o jogo fechado, mesmo com o chip a 60 °C. Nas duas vezes medidas, a ferramenta que desativa o limitador não estava
   rodando. Se o jogo ficar lento de repente, feche e abra.
