@@ -1219,7 +1219,29 @@ static void register_texture(Cpu *c) {
     g_tex_stat_reg++;
     NvnTexEntry *e = &((NvnTexEntry *)d->entries)[id];
     NvnTexture *old = e->tex, *t = HOST(NvnTexture, A(2));
+    // (S23) The slot as this registration leaves it, worked out first: the same as it is, nothing to do - from
+    // TOTKDroid (mamcjr's ebf93f7), where most registrations left the slot as it was and each waited for the render
+    // thread's whole queue for nothing. LARECOMP_TEXREG_DRAIN_ALWAYS=1: as before.
+    NvnTexEntry n;
+    memset(&n, 0, sizeof n);
+    n.tex = t;
+    n.has_view = A(3) != 0;
+    if (n.has_view) memcpy(&n.view, AP(3), sizeof n.view);
+    else n.view = e->view;  // (not read without has_view: kept as it was, as before)
+    {   // the object's own swizzle, where it shares its texture with an object of another (texture_same_storage)
+        const uint8_t *sw = t ? obj_swizzle(A(2)) : NULL;
+        if (sw && memcmp(sw, t->swizzle, 4) && !(n.has_view && (n.view.setmask & 8))) {
+            if (!n.has_view) memset(&n.view, 0, sizeof n.view);
+            n.has_view = true;
+            n.view.setmask |= 8;
+            memcpy(n.view.swizzle, sw, 4);
+        }
+    }
 #ifdef __ANDROID__
+    static int always = -1;
+    if (always < 0) always = getenv("LARECOMP_TEXREG_DRAIN_ALWAYS") != NULL;
+    bool same = old == t && n.has_view == e->has_view && (!n.has_view || !memcmp(&n.view, &e->view, sizeof n.view));
+    if (same && !always) return;
     // An asynchronous draw must finish reading the previous descriptor before its slot is replaced.
     if (old) {
         extern uint64_t g_tex_drain_ns, g_tex_drains;  // (LARECOMP_LOG_TEXDIAG: the game's threads' wait in these)
@@ -1236,17 +1258,8 @@ static void register_texture(Cpu *c) {
         pthread_mutex_unlock(&g_live_lock);
         if (old) texture_retire(old);
     }
-    e->has_view = A(3) != 0;
-    if (e->has_view) memcpy(&e->view, AP(3), sizeof e->view);
-    {   // the object's own swizzle, where it shares its texture with an object of another (texture_same_storage)
-        const uint8_t *sw = t ? obj_swizzle(A(2)) : NULL;
-        if (sw && memcmp(sw, t->swizzle, 4) && !(e->has_view && (e->view.setmask & 8))) {
-            if (!e->has_view) memset(&e->view, 0, sizeof e->view);
-            e->has_view = true;
-            e->view.setmask |= 8;
-            memcpy(e->view.swizzle, sw, 4);
-        }
-    }
+    e->has_view = n.has_view;
+    e->view = n.view;
     static int watch_id = -2;  // LARECOMP_WATCH_TEXID=<hex id>: its registrations (texture, view)
     if (watch_id == -2) watch_id = getenv("LARECOMP_WATCH_TEXID") ? (int)strtol(getenv("LARECOMP_WATCH_TEXID"), NULL, 16) : -1;
     if (id == watch_id || (watch_id == 0x7fffffff && t && t->width == 320 && t->height == 180 && t->levels == 5))  // (7fffffff: the bloom chain)

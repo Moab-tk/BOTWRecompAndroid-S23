@@ -1111,12 +1111,45 @@ static void guest_copy_invalidate(uint64_t lo, uint64_t hi) {
         if (gcopy[s].seq == seq && gcopy[s].addr < hi && lo < gcopy[s].addr + gcopy[s].size) gcopy[s].seq = 0;
     }
 }
-static VkSpan guest_copy(uint64_t addr, uint64_t size) {
-    uint64_t seq = vk_pending_seq() + (gcopy_gen << 40), h = (addr * 0x9E3779B97F4A7C15ull) ^ (size * 0xC2B2AE3D27D4EB4Full);
+// (from TOTKDroid, mamcjr's d206400) Buffer copies made on the GPU (gpu_buffer_copy, below): their destinations, until the
+// submission that copies is done. The CPU copy they replace was in guest memory at once, so a draw reading one
+// (guest_copy) reads the GPU's bytes.
+#define BCOPY_PEND 16
+static VkBuffer gmem_buf;  // (the heap's GPU buffer, below)
+static struct { uint64_t lo, hi, seq; } bcopy_pend[BCOPY_PEND];
+static int bcopy_npend;
+static bool bcopy_pending(uint64_t lo, uint64_t hi) {  // (render thread) drops the done ones; is [lo, hi) still to land?
+    uint64_t done = vk_completed_seq();
+    bool hit = false;
+    int k = 0;
+    for (int i = 0; i < bcopy_npend; i++) {
+        if (bcopy_pend[i].seq <= done) continue;
+        if (bcopy_pend[i].lo < hi && lo < bcopy_pend[i].hi) hit = true;
+        bcopy_pend[k++] = bcopy_pend[i];
+    }
+    bcopy_npend = k;
+    return hit;
+}
+
+enum { GC_CONST, GC_UBO, GC_VTX };
+static VkSpan guest_copy(uint64_t addr, uint64_t size, int kind) {
+    // A range a GPU buffer copy still writes: bound in the heap's own buffer (the copies are only made with the heap
+    // placed), read after the copy in queue order. Never a wait here - this runs inside a draw, with its pass begun:
+    // a submission there crashed Turnip (TOTKDroid, 2026-10-30). Uniforms off the offset alignment can't be bound in
+    // place: they get the bytes from before the copy (logged).
+    if (bcopy_npend && bcopy_pending(addr, addr + size)) {
+        uint64_t off = addr - HEAP_BASE;
+        if (kind == GC_VTX || !(off % g_vk.props.limits.minUniformBufferOffsetAlignment))
+            return (VkSpan){gmem_buf, off, (void *)(uintptr_t)addr};
+        static int nlog;
+        if (nlog++ < 8) LOG("[vk] uniforms at %llx read before a GPU buffer copy into them lands (offset not aligned)\n", (unsigned long long)addr);
+    }
+    // Keyed by the address alone (TOTKDroid): one with the same start and at least this size, made for this
+    // submission, serves - draws reading the same vertex buffer ask for different sizes (their highest index times the
+    // stride), and keyed by the size too each made its own. LARECOMP_AB=<frames>:gcreuse alternates it.
+    uint64_t seq = vk_pending_seq() + (gcopy_gen << 40), h = addr * 0x9E3779B97F4A7C15ull;
     if (gcopy_active_seq != seq) { gcopy_active_seq = seq; gcopy_nactive = 0; }
     uint32_t slot = (uint32_t)(h ^ (h >> 32)) & (GCOPY_TAB - 1);
-    // (from TOTKDroid) a copy of at least this size serves too: draws reading the same vertex buffer ask for different
-    // sizes (their highest index times the stride), and each made its own. LARECOMP_AB=<frames>:gcreuse alternates it.
     if (gcopy[slot].seq == seq && gcopy[slot].addr == addr && (gcopy[slot].size == size || (gcopy[slot].size > size && AB("gcreuse") != 0)))
         return gcopy[slot].span;
     if (gcopy[slot].seq != seq && gcopy_nactive < GCOPY_TAB) gcopy_active[gcopy_nactive++] = (uint16_t)slot;
@@ -3930,7 +3963,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
         NvnShaderStage *ss = &st.program->stages[stage];
         uint64_t size = ss->const_size ? ss->const_size : 16;
         if (size < si->cbuf_size[1]) size = si->cbuf_size[1];
-        return ubo_span(guest_copy(ss->code_addr + ss->const_offset, size), size);  // (constant: shared per submission)
+        return ubo_span(guest_copy(ss->code_addr + ss->const_offset, size, GC_CONST), size);  // (constant: shared per submission)
     }
     int idx = k - 3;  // cbuf_base
     Range r = (idx >= 0 && idx < 18) ? st.ubuf[stage][idx] : (Range){0, 0};
@@ -4205,7 +4238,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
     stat_cb_n[dk]++, stat_cb_bytes[dk] += size;
     if (dk && ct_on()) LOG("[ct] dyncbuf stage %d k %d addr %llx size %llx (bound %llx) fs %016llx\n", stage, k, (unsigned long long)r.addr,
                            (unsigned long long)size, (unsigned long long)r.size, (unsigned long long)g_cur_fs_hash);
-    return ubo_span(guest_copy(r.addr, size), size);
+    return ubo_span(guest_copy(r.addr, size, GC_UBO), size);
 }
 
 // Global memory (shader LDG/STG, maxwell_gmem_base = HEAP_BASE): the guest heap imported as a GPU buffer
@@ -4217,6 +4250,31 @@ static VkDeviceMemory gmem_mem;
 static uint64_t gmem_size;
 #ifdef __ANDROID__
 static bool gmem_placed;  // (gmem_buf is the guest heap itself, usable as a uniform buffer: vk_heap_place)
+
+// (from TOTKDroid, mamcjr's d206400: +2.9% there) CopyBufferToBuffer within the heap's GPU buffer, done by the GPU in its
+// place in the queue. The CPU copy waits for the GPU to finish everything before it (renderer_flush), the render thread
+// stalled and the GPU idle meanwhile. Small copies only, both ends in the heap buffer, not overlapping, the source not
+// itself a copy still to land; the destination is pending until its submission is done (bcopy_pending: a draw reading
+// it binds the heap buffer itself, guest_copy). The game reads it on the CPU only after a fence, which waits for the GPU
+// as before. LARECOMP_VK_GPU_BUFCOPY=0: the CPU copy; LARECOMP_AB=<frames>:bufcopy alternates it.
+static bool gpu_buffer_copy(uint64_t src, uint64_t dst, uint64_t size) {
+    static int on = -1;
+    if (on < 0) on = !getenv("LARECOMP_VK_GPU_BUFCOPY") || atoi(getenv("LARECOMP_VK_GPU_BUFCOPY"));
+    if (!on || AB("bufcopy") == 0 || !gmem_placed || !size || size > 4096 || bcopy_npend >= BCOPY_PEND) return false;
+    if (src < HEAP_BASE || src + size > HEAP_BASE + gmem_size || dst < HEAP_BASE || dst + size > HEAP_BASE + gmem_size) return false;
+    if (src < dst + size && dst < src + size) return false;
+    if (bcopy_pending(src, src + size)) return false;
+    vk_end_pass();
+    VkCommandBuffer cb = vk_cmd();
+    vk_full_barrier(cb);
+    VkBufferCopy c = {src - HEAP_BASE, dst - HEAP_BASE, size};
+    vkCmdCopyBuffer(cb, gmem_buf, gmem_buf, 1, &c);
+    vk_full_barrier(cb);
+    bcopy_pend[bcopy_npend].lo = dst; bcopy_pend[bcopy_npend].hi = dst + size;
+    bcopy_pend[bcopy_npend++].seq = vk_pending_seq();
+    guest_copy_invalidate(dst, dst + size);
+    return true;
+}
 
 static bool ubo_direct(uint64_t addr, uint64_t size, VkDescriptorBufferInfo *out) {
     static int on = -1;
@@ -7296,7 +7354,7 @@ static void draw_(CmdRec *r, bool indexed) {
             else need = (uint64_t)max_index * stride + 256;
             if (v.size && need > v.size) need = v.size;
             if (!v.addr) { static const uint8_t zero[256]; sp = vk_transient_copy(zero, 256, 16); }
-            else sp = guest_copy(v.addr, need ? need : 16);
+            else sp = guest_copy(v.addr, need ? need : 16, GC_VTX);
         }
         VkDeviceSize off = sp.off;
         if (ss_on && (ss.vb_known >> s & 1) && ss.vb[s] == sp.buf && ss.vo[s] == off) continue;
@@ -8523,6 +8581,9 @@ static void exec_list(uint64_t handle, int depth) {
         case CMD_COPY_BUFFER_TO_TEXTURE: copy_buffer_to_texture(r->x[0], x); break;
         case CMD_COPY_TEXTURE_TO_BUFFER: copy_texture_to_buffer(x, r->x[3]); break;
         case CMD_COPY_BUFFER_TO_BUFFER:
+#ifdef __ANDROID__
+            if (gpu_buffer_copy(r->x[0], r->x[1], r->x[2])) break;
+#endif
             wait_why = "buffer -> buffer copy";
             {   // LARECOMP_LOG_BUFCOPY=1: the first 30 (where in the frame, how large: each waits for the GPU here)
                 static int log = -1, n;
