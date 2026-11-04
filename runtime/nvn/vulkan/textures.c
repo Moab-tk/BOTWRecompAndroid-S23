@@ -1423,6 +1423,7 @@ static VkSampler make_sampler(const NvnSamplerDesc *d, bool compare) {
     // (S23) Settings > Video > Tests: only where it means anything, textures with mipmaps filtered both ways
     if (g_settings.force_aniso > 0 && mf > 1 && !d->compare_mode && si.minFilter == VK_FILTER_LINEAR && si.magFilter == VK_FILTER_LINEAR) {
         si.maxAnisotropy = (float)(1 << (g_settings.force_aniso - 1));
+        if (si.maxAnisotropy > g_vk.props.limits.maxSamplerAnisotropy) si.maxAnisotropy = g_vk.props.limits.maxSamplerAnisotropy;  // (Vulkan: within the GPU's limit)
         si.anisotropyEnable = si.maxAnisotropy > 1;
     }
 #endif

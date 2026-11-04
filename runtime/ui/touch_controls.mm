@@ -818,13 +818,18 @@ static ImTextureID decode_item_icon(const char *item) {  // (UI/StockItem/<item>
 // in the DLC's own files: none, the fixed icon stays)
 extern "C" bool pouch_equipped(char out[3][64]);
 static char equipped[3][64];
+// (S23) ICON_CACHE icons at most, each a GPU texture for the rest of the run (imgui_glue.cpp's pool has room for them):
+// the whole game's weapons, bows and shields fit. Past it a new item shows the fixed icon - before, it was decoded and
+// made a new texture every frame, until the menu's 64 texture places ran out and the game closed.
+#define ICON_CACHE 400
 static ImTextureID item_icon(const char *item) {
-    static struct { char name[64]; ImTextureID tex; } cache[64];
+    static struct { char name[64]; ImTextureID tex; } cache[ICON_CACHE];
     static int n;
     if (!item[0]) return 0;
     for (int i = 0; i < n; i++) if (!strcmp(cache[i].name, item)) return cache[i].tex;
+    if (n >= ICON_CACHE) return 0;
     ImTextureID t = decode_item_icon(item);
-    if (n < 64) snprintf(cache[n].name, sizeof cache[n].name, "%s", item), cache[n++].tex = t;
+    snprintf(cache[n].name, sizeof cache[n].name, "%s", item), cache[n++].tex = t;
     return t;
 }
 static void poll_equipped(void) {  // twice a second
@@ -1030,7 +1035,8 @@ extern "C" void touch_controls_draw(ImVec2 display, ImFont *font) {
         bool bar = is_bar(c[i].bit);
         bool on = c[i].bit >= 0 && c[i].bit < 16 && (held >> c[i].bit & 1);
         float fs = (c[i].rect ? c[i].h * (bar ? 0.45f : 0.48f) : c[i].r * 0.9f);
-        ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0, c[i].label);
+        const char *label = bar ? tr(c[i].label) : c[i].label;  // (the edit bar's words in the menu's language)
+        ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0, label);
         ImU32 f = bar ? IM_COL32(60, 90, 70, 230) : on ? fill_on : fill, l = bar ? IM_COL32(236, 194, 84, 255) : line;
         ImU32 tx = bar ? IM_COL32(255, 255, 255, 255) : text;
         if (c[i].rect) {
@@ -1055,7 +1061,7 @@ extern "C" void touch_controls_draw(ImVec2 display, ImFont *font) {
             ImVec2 b2(c[i].x - d[0] * r * 0.6f - px * r * 0.8f, c[i].y - d[1] * r * 0.6f - py * r * 0.8f);
             dl->AddTriangleFilled(tip, b1, b2, tx);
         } else {
-            dl->AddText(font, fs, ImVec2(c[i].x - ts.x / 2, c[i].y - ts.y / 2), tx, c[i].label);
+            dl->AddText(font, fs, ImVec2(c[i].x - ts.x / 2, c[i].y - ts.y / 2), tx, label);
         }
     }
     // the sticks: where each started (or its resting place) and the knob - none for the drag camera, and only while a

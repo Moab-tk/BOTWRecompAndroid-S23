@@ -86,8 +86,15 @@ uint64_t rt_ticks(void) {
     return (uint64_t)((__uint128_t)ns * 192 / 10000);
 }
 
+// (S23) Android: the waits' deadlines on the monotonic clock (pthread_cond_clockwait, API 30 - the app's minimum): on
+// the wall clock a change of the phone's time (its automatic setting, a time zone) moved every timed wait of the game
+#ifdef __ANDROID__
+#define KWAIT_CLOCK CLOCK_MONOTONIC
+#else
+#define KWAIT_CLOCK CLOCK_REALTIME
+#endif
 static void deadline(struct timespec *ts, int64_t timeout_ns) {
-    clock_gettime(CLOCK_REALTIME, ts);
+    clock_gettime(KWAIT_CLOCK, ts);
     ts->tv_sec += timeout_ns / 1000000000;
     ts->tv_nsec += timeout_ns % 1000000000;
     if (ts->tv_nsec >= 1000000000) { ts->tv_sec++; ts->tv_nsec -= 1000000000; }
@@ -104,7 +111,11 @@ static bool kwait(int64_t timeout_ns, const struct timespec *ts) {
     uint64_t t0 = plat_now_ns();
     bool r = true;
     if (timeout_ns < 0) pthread_cond_wait(cv, &g_klock);
+#ifdef __ANDROID__
+    else r = pthread_cond_clockwait(cv, &g_klock, KWAIT_CLOCK, ts) == 0;
+#else
     else r = pthread_cond_timedwait(cv, &g_klock, ts) == 0;
+#endif
     g_blocked_ns += plat_now_ns() - t0;
     return r;
 }
@@ -1033,12 +1044,14 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
     }
     case 0x0C: {  // GetThreadPriority(_, handle)
         KObject *o = handle_get((uint32_t)x[1]);
+        if (o && o->type != KOBJ_THREAD) o = NULL;  // (S23: another object's handle, as the Switch's kernel answers)
         x[0] = o ? R_OK : R_INVALID_HANDLE;
         x[1] = o ? (uint64_t)((KThread *)o)->prio : 0;
         break;
     }
     case 0x0D: {  // SetThreadPriority
         KObject *o = handle_get((uint32_t)x[0]);
+        if (o && o->type != KOBJ_THREAD) o = NULL;  // (S23: not written into another kind of object)
         if (o) ((KThread *)o)->prio = (int)x[1];
         x[0] = o ? R_OK : R_INVALID_HANDLE;
         break;
@@ -1094,6 +1107,8 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
     case 0x13: {  // MapSharedMemory(handle, addr, size, perm)
         KObject *o = handle_get((uint32_t)x[0]);
         if (!o || o->type != KOBJ_SHMEM) { x[0] = R_INVALID_HANDLE; break; }
+        // (S23: only inside the guest window - the memset below writes there)
+        if (x[1] < GUEST_LO || x[2] > GUEST_HI - GUEST_LO || x[1] > GUEST_HI - x[2]) { x[0] = R_INVALID_ADDRESS; break; }
         KSharedMem *s = (KSharedMem *)o;
         memset((void *)x[1], 0, x[2]);
         s->guest_addr = x[1];  // HLE services write straight into the guest's mapping
@@ -1157,6 +1172,7 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
     case 0x24: x[0] = R_OK; x[1] = 0x81; break;  // GetProcessId
     case 0x25: {  // GetThreadId(_, handle)
         KObject *o = handle_get((uint32_t)x[1]);
+        if (o && o->type != KOBJ_THREAD) o = NULL;
         x[0] = o ? R_OK : R_INVALID_HANDLE;
         x[1] = o ? ((KThread *)o)->id : 0;
         break;
@@ -1228,6 +1244,7 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         break;
     }
     case 0x2C:  // MapPhysicalMemory(addr, size)
+        if (x[0] < GUEST_LO || x[1] > GUEST_HI - GUEST_LO || x[0] > GUEST_HI - x[1]) { x[0] = R_INVALID_ADDRESS; break; }
         memset((void *)x[0], 0, x[1]);
         region_add(x[0], x[1], 0x7, 3);
         x[0] = R_OK;

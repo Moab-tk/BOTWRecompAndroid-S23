@@ -134,6 +134,15 @@ void vk_wait_seq(uint64_t seq) {
                               .pValues = &seq};
     uint64_t t0 = SDL_GetTicksNS();
     VkResult r = vkWaitSemaphores(g_vk.dev, &wi, 10ull * 1000000000ull);
+#ifdef __ANDROID__
+    // (S23) A submission still running after 10 s: logged, then 10 s more before giving up. Before, an "else" meant
+    // for the error below took the timeout too on Android only (the gcopy_retire lines came in between): the app
+    // closed at the first 10 s stall, where the desktop goes on
+    if (r == VK_TIMEOUT) {
+        LOG("[vk] GPU did not finish submission %llu within 10 s: waiting 10 s more\n", (unsigned long long)seq);
+        r = vkWaitSemaphores(g_vk.dev, &wi, 10ull * 1000000000ull);
+    }
+#endif
     stat_wait_ns += SDL_GetTicksNS() - t0;
     cum_wait += SDL_GetTicksNS() - t0;
     wait_account(SDL_GetTicksNS() - t0);
@@ -144,8 +153,10 @@ void vk_wait_seq(uint64_t seq) {
     else if (r == VK_SUCCESS) cq_resolve_done(seq);  // (the game reads its timing counters after waiting)
 #ifdef __ANDROID__
     if (r == VK_SUCCESS) gcopy_retire(seq);
-#endif
+    if (r != VK_SUCCESS) {  // (a second timeout too: a hung GPU, reported as the device lost is)
+#else
     else {
+#endif
         extern void vk_devlost_dump(void);
         vk_devlost_dump();
         vk_device_fault_report();
@@ -5827,6 +5838,12 @@ static void build_compute(void *arg) {
     if (!spv) { atomic_store(&cp->p.state, 2); return; }
     cp->p.nbinds = vk_reflect(spv, n, cp->p.binds, MAX_BIND);
     VkShaderModule m = vk_module(spv, n);
+    if (!m) {  // (S23: a module the driver refused - a null one in the pipeline is undefined; as a failed build)
+        LOG("[compute] %llx: shader module not created\n", (unsigned long long)cp->code_addr);
+        atomic_store(&cp->p.state, 2);
+        free(spv);
+        return;
+    }
     cp->p.layout = make_layout(&cp->p, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0);
     VkSpecializationMapEntry me[3] = {{0, 0, 4}, {1, 4, 4}, {2, 8, 4}};
     VkSpecializationInfo spec = {3, me, 12, cp->local};
@@ -5851,7 +5868,9 @@ static void build_compute(void *arg) {
     free(spv);
 }
 
-static struct CsEnt { uint64_t addr; CsProg *cp; } g_cs_tab[256];  // compute programs by code address
+// (S23: 2048, was 256 - one past the table was translated again at every dispatch, never kept)
+#define CS_TAB 2048
+static struct CsEnt { uint64_t addr; CsProg *cp; } g_cs_tab[CS_TAB];  // compute programs by code address
 
 static CsProg *compute_program(NvnProgram *np) {
     NvnShaderStage *ss = &np->stages[5];
@@ -5861,7 +5880,7 @@ static CsProg *compute_program(NvnProgram *np) {
     for (int i = 0; i < n; i++) if (tab[i].addr == ss->code_addr) return tab[i].cp;
     CsProg *cp = calloc(1, sizeof *cp);
     cp->code_addr = ss->code_addr;
-    if (n < 256) { tab[n].addr = ss->code_addr; tab[n].cp = cp; g_cs_n = n + 1; }
+    if (n < CS_TAB) { tab[n].addr = ss->code_addr; tab[n].cp = cp; g_cs_n = n + 1; }
     pthread_mutex_lock(&translate_lock);  // (the translator's globals too: the translator thread sets them for graphics)
     maxwell_gmem_base = HEAP_BASE;
     maxwell_gmem_size = HEAP_MAX;
@@ -8001,6 +8020,7 @@ static void exec_list(uint64_t handle, int depth) {
         case CMD_CLEAR_COLOR: {
             snap_reason = "clear-color"; snapshots_invalidate(NULL);
             int index = (int)r->x[0];
+            if (index < 0) break;  // (S23: below every check that follows - a negative one read before the targets)
             static long clears_from = -1;  // (LARECOMP_LOG_CLEARS=<from frame>)
             if (clears_from < 0) clears_from = getenv("LARECOMP_LOG_CLEARS") ? atol(getenv("LARECOMP_LOG_CLEARS")) : 0x7fffffffL;
             if ((long)renderer_present_count() >= clears_from && index < st.rt.ncolor && st.rt.color[index]) {
