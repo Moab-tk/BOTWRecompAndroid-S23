@@ -1,7 +1,7 @@
 # O que mudou em relação ao original
 
 Projeto original: [BOTWRecompAndroid](https://github.com/mamcjr/BOTWRecompAndroid), de mamcjr. As versões de b1 a b8 partem
-da `0.2.3-beta`, a b9 parte da `0.2.10-beta` e a b10 e a b11 partem da `0.2.13-beta`. A versão de cada etapa está no histórico do repositório.
+da `0.2.3-beta`, a b9 parte da `0.2.10-beta` a b10 e a b11 partem da `0.2.13-beta` e a b12 parte da `0.3.1-beta`. A versão de cada etapa está no histórico do repositório.
 
 ## Resumo por área
 
@@ -172,6 +172,37 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
   e do arremesso, no modo de ícones, vai até 400% (era 200%). Acima de certo ponto o arrasto já inclina o direcional por
   inteiro, e a câmera não gira mais rápido que o máximo do próprio jogo.
 - Testada jogando no S23 Ultra, sem medição.
+
+### b12: junção com o original 0.3.1 e mira pelo dedo
+
+- Tudo da b11, sobre a `0.3.1-beta` de mamcjr (traz também a 0.3.0):
+  - **quedas do jogo com Magnésis, Stasis e a câmera do Slate corrigidas**;
+  - com o arco puxado, um botão troca as flechas; com a runa da câmera, um botão abre o álbum; o mapa abre com dois
+    toques no minimapa;
+  - opção de giroscópio como a tela do Switch;
+  - opção de 40 FPS em telas de 120 Hz;
+  - o app pede ao Android uma folga de processador a 30 FPS;
+  - correções da tela larga (luneta, câmera, minimapa, estábulo, telas de carregamento) e da viagem rápida;
+  - variáveis do driver e memória por arquivo compartilhado, para Mali e Xclipse;
+  - som de volta depois de deixar o app em segundo plano (a biblioteca SDL foi refeita com a correção).
+- **Junção cuidadosa do ritmo dos quadros:** o original passou a alinhar os quadros com a tela de outro jeito (#183).
+  Os dois jeitos leem os mesmos tempos do painel, que o driver entrega uma vez só. Os quadros regulares a 30 FPS do S23
+  continuam o padrão, porque foram medidos no S23 Ultra; o ajuste do original vale quando eles estão desligados
+  (`LARECOMP_VSYNC_STEER=1` ou `0` força um ou outro).
+- Corrigido na junção: o original ligava a extensão de tempo de apresentação depois das duas de mapa de memória, que
+  saem juntas pela contagem quando o driver recusa; o pedido de 40 FPS à janela apagava o pedido de 60 Hz dos quadros
+  regulares.
+- **Mira pelo dedo (experimental, desligada):** com os ícones de ação, o sensor de movimento ligado e o arco na mão,
+  arrastar o dedo gira a mira como se o celular girasse, sem o limite de velocidade do direcional virtual. Fica em
+  Controles, abaixo da sensibilidade da mira. `LARECOMP_DRAG_GYRO_SIGN=-1` inverte o sentido.
+- **Por que a sensibilidade do arrasto parecia não mudar:** a 400% o direcional virtual já fica todo inclinado com
+  quase qualquer arrasto, e a câmera não gira mais rápido que o máximo do próprio jogo. Agora a tela explica isso.
+- **Escala da cena em tamanhos inteiros** (vinda do TOTK S23): o controle de temperatura e as resoluções 75% e
+  dinâmica davam metades de imagem com meio ponto (por exemplo 202,5 linhas), e no TOTK isso fazia cacos nas bordas
+  e o sol estourado. A escala agora é sempre múltiplo de 0,08: 90% vira 88%, 75% vira 72% (`LARECOMP_SCALE_SNAP=0`
+  volta ao jeito antigo).
+- **Não foi testada jogando** antes de publicar: compilada e conferida, mas o dono do aparelho de testes estava
+  dormindo. A b11 continua disponível.
 
 ## O que não foi modificado
 

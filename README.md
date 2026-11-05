@@ -41,8 +41,8 @@ do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
 - **Compilada para o processador do S23**, sem as instruções que ele não tem.
 - **Instala ao lado do original:** o pacote é outro (`com.botwrecomp.android.s23`), então uma versão não substitui a
   outra.
-- **Baseada na versão 0.2.13 do original**, com as correções de mamcjr até ela, como os ícones de ação nos controles
-  na tela.
+- **Baseada na versão 0.3.1 do original**, com as correções de mamcjr até ela, como as quedas com Magnésis, Stasis e a
+  câmera do Slate, o botão de flechas e o giroscópio como a tela do Switch.
 - **Duas versões:** a S23, feita para o processador do Snapdragon 8 Gen 2, e a Universal, para qualquer celular arm64
   com Vulkan. A Universal é experimental: só foi testada no S23.
 - **Menos objetos sumindo ao entrar nas áreas:** o app lembra os pipelines que o jogo usou e monta de novo antes do primeiro
@@ -56,6 +56,8 @@ do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
 - **Quadros regulares a 30 FPS:** a tela fica em 60 Hz e cada quadro segue o ritmo real dela. Nas medições, 97% dos
   quadros apareceram no tempo certo, sem nenhum descartado.
 - **Sensibilidade do toque maior:** o arrasto da câmera vai até 800% e a mira do arco, no modo de ícones, até 400%.
+- **Mira pelo dedo (experimental):** com o arco na mão e o sensor de movimento ligado, o arrasto gira a mira como o
+  celular girando, mais rápido que o limite do direcional.
 - **Menos espera da GPU:** cópias pequenas que o jogo pede são feitas pela própria GPU (trazido do TOTKDroid de mamcjr).
 - **Menos risco de travar em sessões longas**, com tabelas de shaders maiores. A lista completa está em
   [MUDANCAS-S23.md](MUDANCAS-S23.md).
@@ -162,6 +164,10 @@ GPU).
 
 ## Problemas conhecidos
 
+- **b12 sem teste jogando:** foi compilada e conferida, mas publicada antes de ser jogada. Se algo piorar, volte para a
+  b11. A mira pelo dedo vem desligada e o sentido dela ainda não foi conferido.
+- **40 FPS:** a opção nova do original pede tela de 120 Hz e mais calor. No S23 Ultra, 40 FPS não se sustentaram nos
+  testes anteriores.
 - **Paredes verticais no terreno ("cortinas"):** mamcjr corrigiu este defeito na 0.2.10, e a correção está aqui. Ela ainda
   não foi testada a fundo no S23. Se acontecer, carregue um save feito depois.
 - **Engasgadas em áreas novas:** na primeira visita, um shader pode levar de 250 a 300 ms para ficar pronto. Depois ele

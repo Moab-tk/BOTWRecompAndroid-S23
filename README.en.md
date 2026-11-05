@@ -41,8 +41,8 @@ extracted). No instructions on how to get it will be given.
 - **Built for the S23's processor**, without the instructions it doesn't have.
 - **Installs next to the original:** the package is different (`com.botwrecomp.android.s23`), so one doesn't replace the
   other.
-- **Based on version 0.2.13 of the original**, with mamcjr's fixes up to it, such as the action icons on the
-  on-screen controls.
+- **Based on version 0.3.1 of the original**, with mamcjr's fixes up to it, such as the crashes with Magnesis, Stasis
+  and the Slate's camera, the arrow button and the gyro like the Switch's screen.
 - **Two versions:** the S23 one, built for the Snapdragon 8 Gen 2's processor, and the Universal one, for any arm64 phone
   with Vulkan. The Universal one is experimental: it was only tested on the S23.
 - **Fewer missing objects when entering areas:** the app remembers the pipelines the game used and builds them again before
@@ -56,6 +56,8 @@ extracted). No instructions on how to get it will be given.
 - **Saved settings:** 8 blocks to keep everything you set and go back when a test makes things worse.
 - **A larger interface, easier to tap:** text size choice, long names that slide, options in cards.
 - **Higher touch sensitivity:** the camera drag goes up to 800% and the bow aim, in the icon layout, up to 400%.
+- **Aim by dragging (experimental):** with the bow held and motion controls on, a drag turns the aim as the phone
+  turning would, faster than the stick's top speed.
 - **Less waiting for the GPU:** small copies the game asks for are made by the GPU itself (from mamcjr's TOTKDroid).
 - **Less risk of a hang in long sessions**, with larger shader tables.
 
@@ -158,6 +160,10 @@ game's own shorter draw distance on the whole map (3.5% fewer draws at the same 
 
 ## Known problems
 
+- **b12 not tested by playing:** it was built and checked, but published before being played. If something gets worse,
+  go back to b11. Aim by dragging comes off, and its direction wasn't checked yet.
+- **40 FPS:** the original's new option needs a 120 Hz screen and more heat. On the S23 Ultra, 40 FPS didn't hold in
+  earlier tests.
 - **Vertical walls on the terrain ("curtains"):** mamcjr fixed this defect in 0.2.10, and the fix is here. It wasn't tested
   deeply on the S23 yet. If it happens, load a later save.
 - **Stutter in new areas:** on the first visit, a shader may take 250 to 300 ms to get ready. After that it stays on the
