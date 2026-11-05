@@ -229,6 +229,20 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - **Jogada no S23 Ultra (05/11/2026):** o santuário de movimento passou com os analógicos, mais fácil que inclinando o
   celular. O modo 60 FPS ficou em 30 a 32 FPS, com o chip a 49-61 °C: o limite é o peso da cena, não o calor.
 
+### b14: drivers em abas por chip (05/11/2026)
+
+- **Pesquisa de drivers** (pedido do Moab): issues do original, repositórios de drivers e guias de 2026, em
+  [DRIVERS.md](DRIVERS.md). 26 drivers Turnip conferidos por dentro (arm64, funções do Vulkan, GPUs reconhecidas).
+- **Abas por chip** em Configurações > Arquivos > Driver Vulkan, o mais novo em cima; a aba do celular já vem aberta.
+  A S23 traz só a do 8 Gen 2 (9 drivers); a Universal, as 8 abas.
+- **Recomendado pelo aparelho:** na primeira vez, o app lê a marca, o sistema (One UI, HyperOS, ColorOS...), o chip,
+  a GPU e a versão do driver do sistema, e escolhe o driver. No 8 Gen 2, a versão One UI vai para Samsung e para
+  driver do sistema 676.70 ou mais novo (o S23 Ultra está na 676.79). A tela mostra o que foi lido.
+- **Só o escolhido é copiado** para o celular (antes, todos os que vinham no app eram copiados).
+- Os de 01/11 saíram (os de 05/11 são mais novos); os que já tinham sido copiados continuam na lista.
+- Drivers da Qualcomm não vêm no app (não podem ser redistribuídos): o botão Adicionar driver continua.
+- **Não foi testada jogando.**
+
 ## O que não foi modificado
 
 - As ferramentas de compilação no celular e a identificação do código do jogo: `gen.id` e `GAMELIB_ID` são os mesmos

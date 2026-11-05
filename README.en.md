@@ -104,19 +104,18 @@ The screen shape, sound, controls, mods and saves don't change.
 
 ## Which driver to use
 
-All are Mesa builds by [The412Banner](https://github.com/The412Banner/Banners-Turnip). The 10/25 ones were used in the
-tests. The 11/01 ones are automated builds: their author warns they weren't tested on a device, and they weren't tested on
-this game.
+From b14 on, the drivers are in tabs, one per chip, newest at the top: Settings > Files > Vulkan driver. On its first
+start the app reads the phone (chip, GPU and system driver version) and picks the recommended one. A driver is copied out
+only when it's chosen.
 
-| Your phone | Driver | Status |
-|---|---|---|
-| Galaxy S23, with One UI | `Turnip-v27.0.0-20261025-r5-8G2-OneUI` | Recommended |
-| Other Snapdragon 8 Gen 2 | `Turnip-v27.0.0-20261025-r5` | Recommended |
-| Galaxy S23, with One UI | `Turnip-v27.0.0-20261101-r4-8G2-OneUI` | Newer, not tested |
-| Other Adreno 6xx and 7xx GPUs | `Turnip-v27.0.0-20261101-r4` | Newer, not tested |
-| Adreno 8xx (Snapdragon 8 Elite) | `Turnip-v27.0.0-20261101-r4-A8xx` | Experimental, not tested |
+- **S23 version:** only the Snapdragon 8 Gen 2 tab, with 9 drivers. On the S23 Ultra the recommended one is
+  `Turnip-v27.0.0-20261025-r5-8G2-OneUI`, the tested one. On non-Samsung phones whose system driver is older than 676.70,
+  the same without the One UI flag.
+- **Universal version:** 26 drivers in 8 tabs: 8 Gen 2, 8 Gen 3, 8 Gen 1, 8 Elite and Adreno 8xx, 8s Gen 3 and 7+ Gen 3,
+  7+ Gen 2, Adreno 710/720/722 and Adreno 6xx (888, 865, 845...).
 
-The One UI one may make the screen flicker on phones that aren't Samsung. Nothing here was tested on other devices.
+Where each driver comes from, what players reported and why each one is recommended: [DRIVERS.md](DRIVERS.md). Apart from
+the S23 Ultra, nothing was tested on this game.
 
 ## Measured performance
 
