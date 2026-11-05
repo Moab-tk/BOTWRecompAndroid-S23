@@ -96,7 +96,7 @@ static void touch_layout_draw(void) {
         float as = (g_settings.touch_aim_sens > 0.1f ? g_settings.touch_aim_sens : 1.0f) * 100;
         ImGui::TextUnformatted(tr("Aim sensitivity (bow, throw)"));
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::SliderFloat("##AimSens", &as, 25, 200, "%.0f%%")) g_settings.touch_aim_sens = as / 100;
+        if (ImGui::SliderFloat("##AimSens", &as, 25, 400, "%.0f%%")) g_settings.touch_aim_sens = as / 100;
         if (ImGui::IsItemDeactivatedAfterEdit()) settings_save();
         if (ImGui::Checkbox(tr("Simple controls in talks"), &g_settings.touch_talk)) settings_save();
         hint("In a conversation only the stick, A and B stay on the screen. Off: all the buttons stay.");
@@ -109,7 +109,7 @@ static void touch_layout_draw(void) {
         float sens = g_settings.touch_drag_sens * 100;
         ImGui::TextUnformatted(tr("Drag sensitivity"));
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::SliderFloat("##DragSens", &sens, 25, 400, "%.0f%%")) g_settings.touch_drag_sens = sens / 100;
+        if (ImGui::SliderFloat("##DragSens", &sens, 25, 800, "%.0f%%")) g_settings.touch_drag_sens = sens / 100;
         if (ImGui::IsItemDeactivatedAfterEdit()) settings_save();
     }
     if (ImGui::Checkbox(tr("Sticks only while touched"), &g_settings.touch_sticks_hidden)) settings_save();

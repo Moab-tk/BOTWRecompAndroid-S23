@@ -55,6 +55,8 @@ do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
 - **Interface maior e mais fácil de tocar:** escolha de tamanho do texto, nomes longos que deslizam, opções em cartões.
 - **Quadros regulares a 30 FPS:** a tela fica em 60 Hz e cada quadro segue o ritmo real dela. Nas medições, 97% dos
   quadros apareceram no tempo certo, sem nenhum descartado.
+- **Sensibilidade do toque maior:** o arrasto da câmera vai até 800% e a mira do arco, no modo de ícones, até 400%.
+- **Menos espera da GPU:** cópias pequenas que o jogo pede são feitas pela própria GPU (trazido do TOTKDroid de mamcjr).
 - **Menos risco de travar em sessões longas**, com tabelas de shaders maiores. A lista completa está em
   [MUDANCAS-S23.md](MUDANCAS-S23.md).
 

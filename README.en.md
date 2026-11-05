@@ -55,6 +55,8 @@ extracted). No instructions on how to get it will be given.
   weaker phones.
 - **Saved settings:** 8 blocks to keep everything you set and go back when a test makes things worse.
 - **A larger interface, easier to tap:** text size choice, long names that slide, options in cards.
+- **Higher touch sensitivity:** the camera drag goes up to 800% and the bow aim, in the icon layout, up to 400%.
+- **Less waiting for the GPU:** small copies the game asks for are made by the GPU itself (from mamcjr's TOTKDroid).
 - **Less risk of a hang in long sessions**, with larger shader tables.
 
 ## Installing

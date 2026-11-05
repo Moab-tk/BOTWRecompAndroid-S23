@@ -1,7 +1,7 @@
 # O que mudou em relação ao original
 
 Projeto original: [BOTWRecompAndroid](https://github.com/mamcjr/BOTWRecompAndroid), de mamcjr. As versões de b1 a b8 partem
-da `0.2.3-beta`, a b9 parte da `0.2.10-beta` e a b10 parte da `0.2.13-beta`. A versão de cada etapa está no histórico do repositório.
+da `0.2.3-beta`, a b9 parte da `0.2.10-beta` e a b10 e a b11 partem da `0.2.13-beta`. A versão de cada etapa está no histórico do repositório.
 
 ## Resumo por área
 
@@ -158,6 +158,20 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
   desenho, numa fila de baixa prioridade feita por um ajudante só. A primeira sessão depois de instalar só anota.
 - O cache de pipelines é gravado numa linha própria e não segura mais os toques a cada 30 s.
 - A limpeza das vistas de textura não percorre mais a tabela inteira quando a textura não tem vistas.
+
+### b11: cópias pela GPU e sensibilidade do toque maior
+
+- Tudo da b10.
+- **Trazido do TOTKDroid de mamcjr:**
+  - cópias pequenas de buffer dentro da memória da GPU são feitas pela própria GPU, na ordem da fila; antes a linha de
+    desenho parava e esperava a GPU terminar tudo (`LARECOMP_VK_GPU_BUFCOPY=0` volta ao jeito antigo);
+  - as cópias de dados do jogo são reaproveitadas pelo endereço, então uma cópia maior já feita serve para as menores;
+  - um registro de textura que deixa o lugar igual não espera mais a fila da linha de desenho
+    (`LARECOMP_TEXREG_DRAIN_ALWAYS=1` volta ao jeito antigo).
+- **Sensibilidade do toque maior**, a pedido de jogadores: o arrasto da câmera vai até 800% (era 400%) e a mira do arco
+  e do arremesso, no modo de ícones, vai até 400% (era 200%). Acima de certo ponto o arrasto já inclina o direcional por
+  inteiro, e a câmera não gira mais rápido que o máximo do próprio jogo.
+- Testada jogando no S23 Ultra, sem medição.
 
 ## O que não foi modificado
 
