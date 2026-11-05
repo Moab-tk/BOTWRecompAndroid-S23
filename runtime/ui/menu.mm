@@ -561,18 +561,20 @@ static void tab_display(bool in_game) {
         // isn't loaded yet: the 1.8.2 choices.)
         extern int g_game_version;
         bool sixty = g_game_version == 0 || g_game_version >= 182;
-        if (!sixty && g_settings.fps_mode == 2) g_settings.fps_mode = 1;
-        // display order -> fps_mode (20 fps came last, 3, after the ini's values)
+        if (!sixty && (g_settings.fps_mode == 2 || g_settings.fps_mode == 4)) g_settings.fps_mode = 1;
+        // display order -> fps_mode (20 and 45 fps came later, 3 and 4, after the ini's values)
         static const char *fr[] = {"Auto (20 / 30)", "20 fps", "30 fps"};
-        static const char *fr60[] = {"Auto (30 / 60)", "20 fps", "30 fps", "60 fps"};
-        static const int fr_mode[] = {0, 3, 1, 2};
+        static const char *fr60[] = {"Auto (30 / 60)", "20 fps", "30 fps", "40 / 45 fps", "60 fps"};
+        static const int fr_mode[] = {0, 3, 1, 4, 2};
         int fi = 0;
-        for (int i = 0; i < 4; i++) if (fr_mode[i] == g_settings.fps_mode) fi = i;
-        if (opt_choice("Frame rate", &fi, sixty ? fr60 : fr, sixty ? 4 : 3, 2,
+        for (int i = 0; i < 5; i++) if (fr_mode[i] == g_settings.fps_mode) fi = i;
+        if (!sixty && fi > 2) fi = 2;
+        if (opt_choice("Frame rate", &fi, sixty ? fr60 : fr, sixty ? 5 : 3, 2,
                        sixty ? "Auto: 60 fps where your device keeps up, 30 where it doesn't (the game's clock stays right "
                                "either way). 20 fps: for slower devices - steady, and the coolest. 30 fps: steady and "
-                               "cooler - the phone heats less. 60 fps: always aims for 60 (game versions 1.8.2 and 1.9.0; "
-                               "1.0.0 and 1.6.0 run at 30)."
+                               "cooler - the phone heats less. 40 / 45 fps: between the two, at the rate your screen shows "
+                               "evenly - 40 on a 120 Hz screen, 45 on a 90 Hz one (30 on a 60 Hz one). 60 fps: always aims for 60 "
+                               "(game versions 1.8.2 and 1.9.0; 1.0.0 and 1.6.0 run at 30)."
                              : "Auto: the game picks, as on the Switch, and drops to 20 fps where a frame doesn't fit in "
                                "30. 20 fps: always 20, for slower devices. 30 fps: always 30 - where a frame takes longer, "
                                "the game runs slightly slower instead of dropping to 20."))
@@ -770,6 +772,9 @@ static void tab_about(void) {
     }
     hint("Auto: a controller's gyroscope once it sends live readings, the phone's otherwise. Phone: always the phone's - "
          "for a controller that says it has a gyroscope but doesn't. Controller: only the controller's.");
+    if (toggle("Phone motion like the Switch's screen", &g_settings.motion_flat)) settings_save();  // (hle/motion.c, #211 #247)
+    hint("Off: the phone moves the aim as a controller would. On: as the Switch's own screen in handheld mode - try it if "
+         "tilting the phone turns the aim, and turning it tilts.");
     ImGui::Spacing();
     controls_bindings_draw(ImGui::GetFontSize() / 34);
     ImGui::Spacing();

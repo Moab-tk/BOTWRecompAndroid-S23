@@ -594,6 +594,8 @@ extern "C" bool vk_turnip_heap_on(int setting);
 extern "C" bool vk_lrz_at_start(void);
 extern "C" bool vk_tests_changed(void);
 extern "C" void vk_gpu_turbo(bool front);
+extern "C" const char *vk_driver_env_at_start(void);
+extern "C" bool vk_heap_file_possible(void);
 extern "C" const char *vk_gpu_name(void);
 extern "C" const char *vk_driver_rejected(void);  // (runtime/nvn/vulkan/android_driver.c)
 extern "C" const char *vk_driver_desc(void);      // (its own name and version: runtime/nvn/vulkan/device.c)
@@ -2167,6 +2169,14 @@ static void prelaunch_tab(float sc) {
                                   "wherever Turnip can map it - without it an Adreno 7xx shows no text. Applies when the "
                                   "game starts."));
         ImGui::Spacing();
+        changed |= ImGui::Checkbox(tr("Game memory through a shared file (experimental)"), &g_settings.heap_file);
+        ImGui::TextDisabled("%s", tr("For GPUs where the option above can't work (Mali, Xclipse): the game's memory is shared "
+                                  "with the GPU through a file the driver exports, instead of being copied each frame - "
+                                  "possibly much faster, but untested on those GPUs: if the game draws wrong, runs slower "
+                                  "or closes, turn it off. Needs 8 GB of RAM or more. Applies when the game starts."));
+        if (!vk_heap_file_possible())
+            ImGui::TextDisabled("%s", tr("This driver can't export its memory: the option does nothing here."));
+        ImGui::Spacing();
         ImGui::Text("%s", tr("Draw-target reads in place (Turnip)"));
         changed |= tri("inplace", &g_settings.inplace_reads, a8);
         ImGui::TextDisabled("%s", tr("On: decals and effects read the image they draw on as it is, the fastest way. Off: a copy "
@@ -2178,8 +2188,16 @@ static void prelaunch_tab(float sc) {
         ImGui::TextDisabled("%s", tr("Turnip's early depth test, a little faster. Off can fix missing or broken drawing on "
                                   "some Adreno GPUs. Automatic: on for Adreno 8xx GPUs and the Adreno 740, off for the others. Applies when "
                                   "BOTWRecompAndroid restarts."));
+        ImGui::Spacing();
+        ImGui::Text("%s", tr("Driver variables"));  // (#227: g_settings.driver_env, vulkan/device.c)
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        changed |= ImGui::InputTextWithHint("##driverenv", "FD_DEV_FEATURES=enable_tp_ubwc_flag_hint=1", g_settings.driver_env,
+                                            sizeof g_settings.driver_env);
+        ImGui::TextDisabled("%s", tr("Advanced: switches the Vulkan driver reads when it starts, as NAME=value, separated by "
+                                  "spaces. Leave it empty unless a guide for your phone tells you which ones. Applies when "
+                                  "BOTWRecompAndroid restarts."));
         bool lrz_now = g_settings.turnip_lrz < 0 ? a8 : g_settings.turnip_lrz != 0;
-        if (lrz_now != vk_lrz_at_start()) {  // (Turnip reads it once, when the app starts)
+        if (lrz_now != vk_lrz_at_start() || strcmp(g_settings.driver_env, vk_driver_env_at_start())) {  // (read once, at the start)
             ImGui::Text("%s", tr("Restart BOTWRecompAndroid to apply it."));
             ImGui::SameLine();
             ImGui::PushID("lrz");  // (the driver's own Restart now may be showing too)

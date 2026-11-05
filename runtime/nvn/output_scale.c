@@ -38,7 +38,7 @@ static void dyn_update(double now, double gpu_ms) {
 #ifdef __ANDROID__
     // the frame rate it keeps: 60 with Frame rate at 60 fps, else 30 - Auto's 60 comes by itself where the GPU has room.
     // (Aiming at Auto's tries for 60 took the scale to its floor while the game stayed at 30: POCO F7 Ultra, 2026-10-25)
-    want = g_settings.fps_mode == 2 ? want : g_settings.fps_mode == 3 ? 1000.0 / 20 : 1000.0 / 30;
+    want = g_settings.fps_mode == 2 || g_settings.fps_mode == 4 ? want : g_settings.fps_mode == 3 ? 1000.0 / 20 : 1000.0 / 30;  // (45: its 22 ms)
 #endif
     g_dyn_dt_sum += dt;
     g_dyn_n++;
@@ -155,6 +155,24 @@ void output_scale(double dw, double dh, bool reshape_allowed, double now, double
         if (mode != RES_MATCH) hs = fmin(base * share, hs);
     }
     hs = fmax(hs * heat_factor(now), 0.1);
+    {   // (S23, from the TOTK S23 build) The scene's targets are scaled one by one from their guest sizes (1600x900 and its
+        // halves down to an eighth): at 0.9 a quarter of 900 lines came out 203 lines against 810 / 4 = 202.5 for the full
+        // one, and a pass reading a smaller target at the full one's edges read it half a texel off - in TOTK dotted,
+        // shard-like edges and a blown-out sun under the temperature control's 90 % and 70 % steps (2026-11-05). A whole
+        // multiple of 1 / 12.5 (0.08: 128x72 pixels) keeps every half down to the eighth whole: 0.9 -> 0.88, 0.75 -> 0.72,
+        // 0.7 -> 0.64; 0.8, 1.2 and whole scales stay. LARECOMP_SCALE_SNAP=0: as before.
+        static int snap = -1;
+        if (snap < 0) snap = !getenv("LARECOMP_SCALE_SNAP") || atoi(getenv("LARECOMP_SCALE_SNAP"));
+        if (snap && fabs(hs - round(hs)) > 1e-6) {
+            double s = fmax(floor(hs * 12.5 + 1e-6) / 12.5, 0.08);
+            static double last_in = -1;
+            if (hs != last_in) {
+                last_in = hs;
+                LOG("[scale] scene %.3f -> %.2f (%.0f lines: its halves whole)\n", hs, s, s * SCENE_LINES);
+            }
+            hs = s;
+        }
+    }
     o->scene_sx = hs * shape; o->scene_sy = hs;
     double scap = fmin(MAX_TEX / (1920.0 * o->scene_sx), MAX_TEX / (1080.0 * o->scene_sy));
     if (scap < 1.0) { o->scene_sx *= scap; o->scene_sy *= scap; }

@@ -99,11 +99,42 @@ static void add_sample(const float w[3], float dt) {
     s->attributes = 1;
 }
 
-// SDL's frame (rad/s or m/s^2) in: angular velocity -> a sample, acceleration -> the way down
-static void feed(SDL_SensorType type, const float d[3], uint64_t ts) {
+// (S23) Aim by dragging (Settings > Controls, the icon layout: g_settings.touch_drag_gyro): a finger's travel while the bow
+// is held, as the phone turning that far - the game's gyro aim has no top speed, the right stick's has (a camera drag past
+// 400% sensitivity already held it at full tilt). Turns in the screen's frame, added to the phone's own readings in feed
+// (the frames below then as for a real turn): right about the screen's up axis, up about its right axis.
+// LARECOMP_DRAG_GYRO_SIGN=-1 reverses both, should a phone's sensors read the other way round.
+static float drag_pend[2];  // (m_lock) radians still to add: right, up
+void motion_drag_add(float right, float up) {
+    static int sign = 0;
+    if (!sign) sign = getenv("LARECOMP_DRAG_GYRO_SIGN") && atoi(getenv("LARECOMP_DRAG_GYRO_SIGN")) < 0 ? -1 : 1;
     pthread_mutex_lock(&m_lock);
+    // (a turn not taken - no gyroscope readings - never builds up past a radian)
+    drag_pend[0] = fmaxf(-1.0f, fminf(1.0f, drag_pend[0] + sign * right));
+    drag_pend[1] = fmaxf(-1.0f, fminf(1.0f, drag_pend[1] + sign * up));
+    pthread_mutex_unlock(&m_lock);
+}
+static void drag_take(float g[3], float dt) {  // (m_lock held; the screen's frame, rad/s) at most 20 rad/s, the rest next
+    float lim = 20.0f * dt;
+    float r = fmaxf(-lim, fminf(lim, drag_pend[0])), u = fmaxf(-lim, fminf(lim, drag_pend[1]));
+    drag_pend[0] -= r, drag_pend[1] -= u;
+    g[1] -= r / dt;  // (turning right: clockwise seen from above, about the screen's up axis)
+    g[0] += u / dt;  // (aiming up: the back of the phone toward the sky, about its right axis)
+}
+
+// SDL's frame (rad/s or m/s^2) in: angular velocity -> a sample, acceleration -> the way down
+// phone: the phone's own sensors (on the screen as it's turned: to_screen). Held upright they turn as a controller
+// lying flat would - the Switch's axes (x, -z, y) of the screen's; with Motion like the Switch's screen (#211, #247:
+// "tilting turns the aim, turning tilts it") they are the screen's own, as the console's in handheld mode. Gyroscope
+// and accelerometer alike: a rotation, so the way down stays with the turns.
+static void feed(SDL_SensorType type, const float d[3], uint64_t ts, bool phone) {
+    pthread_mutex_lock(&m_lock);
+    bool flat = phone && g_settings.motion_flat;
+    static int last_flat = -1;  // (the frame changed in the menu: the attitude is levelled again from the way down)
+    if (phone && last_flat != flat) { if (last_flat >= 0) q_set = false; last_flat = flat; }
     if (type == SDL_SENSOR_ACCEL) {
-        m_accel[0] = -d[0] / 9.80665f, m_accel[1] = d[2] / 9.80665f, m_accel[2] = -d[1] / 9.80665f;
+        if (flat) m_accel[0] = -d[0] / 9.80665f, m_accel[1] = -d[1] / 9.80665f, m_accel[2] = -d[2] / 9.80665f;
+        else m_accel[0] = -d[0] / 9.80665f, m_accel[1] = d[2] / 9.80665f, m_accel[2] = -d[1] / 9.80665f;
         if (!q_set) level_from(m_accel);
     } else if (type == SDL_SENSOR_GYRO) {
         float dt = m_gyro_ts && ts > m_gyro_ts ? (float)((ts - m_gyro_ts) / 1e9) : 0.005f;
@@ -135,7 +166,8 @@ static void feed(SDL_SensorType type, const float d[3], uint64_t ts) {
             }
             for (int i = 0; i < 3; i++) g[i] -= bias[i];
         }
-        const float w[3] = {g[0], -g[2], g[1]};
+        if (phone) drag_take(g, dt);
+        const float w[3] = {g[0], flat ? g[1] : -g[2], flat ? g[2] : g[1]};
         add_sample(w, dt);
         m_live_ns = SDL_GetTicksNS();
     }
@@ -196,12 +228,12 @@ void motion_event(const SDL_Event *e) {
         if (source == 2 || (source == 0 && SDL_GetTicksNS() < pad_until_ns)) return;
         float s[3];
         to_screen(e->sensor.data, s);
-        feed(SDL_GetSensorTypeForID(e->sensor.which), s, e->sensor.sensor_timestamp ? e->sensor.sensor_timestamp : SDL_GetTicksNS());
+        feed(SDL_GetSensorTypeForID(e->sensor.which), s, e->sensor.sensor_timestamp ? e->sensor.sensor_timestamp : SDL_GetTicksNS(), true);
     } else if (e->type == SDL_EVENT_GAMEPAD_SENSOR_UPDATE) {
         if (source == 1) return;
         if (source == 2) {
             feed((SDL_SensorType)e->gsensor.sensor, e->gsensor.data,
-                 e->gsensor.sensor_timestamp ? e->gsensor.sensor_timestamp : SDL_GetTicksNS());
+                 e->gsensor.sensor_timestamp ? e->gsensor.sensor_timestamp : SDL_GetTicksNS(), false);
             return;
         }
         // A controller's sensors replace the phone's only once its gyroscope is alive: some report one that never is (a
@@ -242,7 +274,7 @@ void motion_event(const SDL_Event *e) {
         if (!pad_live) return;
         pad_until_ns = SDL_GetTicksNS() + 500000000;
         feed((SDL_SensorType)e->gsensor.sensor, e->gsensor.data,
-             e->gsensor.sensor_timestamp ? e->gsensor.sensor_timestamp : SDL_GetTicksNS());
+             e->gsensor.sensor_timestamp ? e->gsensor.sensor_timestamp : SDL_GetTicksNS(), false);
     }
 }
 

@@ -24,8 +24,8 @@ android {
         applicationId = "com.botwrecomp.android.s23"
         minSdk = 30
         targetSdk = 36
-        versionCode = 48
-        versionName = if (universal) "0.2.13-universal-b11" else "0.2.13-s23-b11"
+        versionCode = 49
+        versionName = if (universal) "0.3.1-universal-b12" else "0.3.1-s23-b12"
         manifestPlaceholders["appLabel"] = if (universal) "BOTW Universal" else "BOTW S23"
         ndk {
             abiFilters += "arm64-v8a"

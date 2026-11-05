@@ -98,6 +98,9 @@ static void touch_layout_draw(void) {
         ImGui::SetNextItemWidth(-1);
         if (ImGui::SliderFloat("##AimSens", &as, 25, 400, "%.0f%%")) g_settings.touch_aim_sens = as / 100;
         if (ImGui::IsItemDeactivatedAfterEdit()) settings_save();
+        if (ImGui::Checkbox(tr("Aim by dragging (experimental)"), &g_settings.touch_drag_gyro)) settings_save();
+        hint("With motion controls on: while the bow is held, a finger dragged on the screen turns the aim as turning the "
+             "phone would - faster than the stick's top speed. Uses the aim sensitivity above.");
         if (ImGui::Checkbox(tr("Simple controls in talks"), &g_settings.touch_talk)) settings_save();
         hint("In a conversation only the stick, A and B stay on the screen. Off: all the buttons stay.");
     }
@@ -111,6 +114,8 @@ static void touch_layout_draw(void) {
         ImGui::SetNextItemWidth(-1);
         if (ImGui::SliderFloat("##DragSens", &sens, 25, 800, "%.0f%%")) g_settings.touch_drag_sens = sens / 100;
         if (ImGui::IsItemDeactivatedAfterEdit()) settings_save();
+        hint("Higher: a shorter drag turns the camera at full speed. The game's own top speed stays: past about 400% only "
+             "slow drags change.");
     }
     if (ImGui::Checkbox(tr("Sticks only while touched"), &g_settings.touch_sticks_hidden)) settings_save();
     hint("The sticks are drawn only while a finger holds them, for a cleaner screen.");
