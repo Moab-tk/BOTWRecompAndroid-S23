@@ -223,7 +223,11 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
   desempenho, e fica onde for deixado. O toque nele não vai para o jogo.
 - A lista de pipelines conhecidos é gravada sem segurar a trava que a linha de desenho usa a cada pipeline novo.
 - "conectado" em português.
-- O código do jogo não muda (instala por cima, sem recompilar). **Não foi testada jogando.**
+- Depois do primeiro teste, os analógicos ficaram leves no meio do curso: na metade, cerca de um quarto do movimento;
+  inteiro só na borda.
+- O código do jogo não muda (instala por cima, sem recompilar).
+- **Jogada no S23 Ultra (05/11/2026):** o santuário de movimento passou com os analógicos, mais fácil que inclinando o
+  celular. O modo 60 FPS ficou em 30 a 32 FPS, com o chip a 49-61 °C: o limite é o peso da cena, não o calor.
 
 ## O que não foi modificado
 

@@ -58,6 +58,11 @@ extracted). No instructions on how to get it will be given.
 - **Higher touch sensitivity:** the camera drag goes up to 800% and the bow aim, in the icon layout, up to 400%.
 - **Aim by dragging (experimental):** with the bow held and motion controls on, a drag turns the aim as the phone
   turning would, faster than the stick's top speed.
+- **Motion with the sticks (new):** for the shrines' motion puzzles. In System > Controls: the left stick tilts the
+  controller and the right one turns it; gentle through most of the travel, the full motion only at the edge. With
+  "Quick button on the screen", a button you can drag turns it on and off without opening the menu. In the author's
+  tests, those shrines were much easier this way than tilting the phone, but it's just one more option: play the way
+  you like best.
 - **Less waiting for the GPU:** small copies the game asks for are made by the GPU itself (from mamcjr's TOTKDroid).
 - **Less risk of a hang in long sessions**, with larger shader tables.
 
@@ -160,8 +165,10 @@ game's own shorter draw distance on the whole map (3.5% fewer draws at the same 
 
 ## Known problems
 
-- **b12 not tested by playing:** it was built and checked, but published before being played. If something gets worse,
-  go back to b11. Aim by dragging comes off, and its direction wasn't checked yet.
+- **b13 played only a little:** one motion shrine and a quick performance test. If something gets worse, go back to
+  b11. Aim by dragging comes off, and its direction wasn't checked yet.
+- **60 FPS:** on the S23 Ultra, the 60 mode stayed at 30 to 32 FPS (each frame took 33 to 41 ms), with the chip cool.
+  Use 30.
 - **40 FPS:** the original's new option needs a 120 Hz screen and more heat. On the S23 Ultra, 40 FPS didn't hold in
   earlier tests.
 - **Vertical walls on the terrain ("curtains"):** mamcjr fixed this defect in 0.2.10, and the fix is here. It wasn't tested

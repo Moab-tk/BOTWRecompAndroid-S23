@@ -58,6 +58,11 @@ do que foi modificado está em [MUDANCAS-S23.md](MUDANCAS-S23.md).
 - **Sensibilidade do toque maior:** o arrasto da câmera vai até 800% e a mira do arco, no modo de ícones, até 400%.
 - **Mira pelo dedo (experimental):** com o arco na mão e o sensor de movimento ligado, o arrasto gira a mira como o
   celular girando, mais rápido que o limite do direcional.
+- **Movimento pelos analógicos (novo):** para os quebra-cabeças de movimento dos santuários. Em Sistema >
+  Controles: o analógico esquerdo inclina o controle e o direito gira; leve no meio do curso, inteiro só na borda.
+  Com "Botão rápido na tela", um botão que dá para arrastar liga e desliga sem abrir o menu. Nos testes do autor,
+  passar esses santuários foi bem mais fácil assim do que inclinando o celular, mas é só uma opção a mais: jogue do
+  jeito que achar melhor.
 - **Menos espera da GPU:** cópias pequenas que o jogo pede são feitas pela própria GPU (trazido do TOTKDroid de mamcjr).
 - **Menos risco de travar em sessões longas**, com tabelas de shaders maiores. A lista completa está em
   [MUDANCAS-S23.md](MUDANCAS-S23.md).
@@ -164,8 +169,9 @@ GPU).
 
 ## Problemas conhecidos
 
-- **b12 sem teste jogando:** foi compilada e conferida, mas publicada antes de ser jogada. Se algo piorar, volte para a
-  b11. A mira pelo dedo vem desligada e o sentido dela ainda não foi conferido.
+- **b13 jogada pouco:** um santuário de movimento e um teste rápido de desempenho. Se algo piorar, volte para a b11.
+  A mira pelo dedo vem desligada e o sentido dela ainda não foi conferido.
+- **60 FPS:** no S23 Ultra, o modo 60 ficou em 30 a 32 FPS (cada quadro levou 33 a 41 ms), com o chip frio. Use 30.
 - **40 FPS:** a opção nova do original pede tela de 120 Hz e mais calor. No S23 Ultra, 40 FPS não se sustentaram nos
   testes anteriores.
 - **Paredes verticais no terreno ("cortinas"):** mamcjr corrigiu este defeito na 0.2.10, e a correção está aqui. Ela ainda
