@@ -247,6 +247,8 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - **Achado do teste:** as quedas para 15-20 FPS vieram do calor da bateria, não do driver. Com a bateria a 39,5 °C, o
   sistema prendeu a GPU em 295 MHz (de 719) e o processador pela metade, com o chip a só 55 °C. Com cooler, bateria a
   31 °C: tudo liberado e 30 FPS cravados por 8 minutos. Para comparar drivers, compare com a bateria fria.
+- **Botão rápido do movimento pelos analógicos redondo e pequeno** (pedido do Moab), com um analógico desenhado, no lugar
+  da pílula com texto: cobria demais a tela junto com os controles de toque.
 
 ## O que não foi modificado
 
