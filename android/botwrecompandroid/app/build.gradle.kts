@@ -24,8 +24,8 @@ android {
         applicationId = "com.botwrecomp.android.s23"
         minSdk = 30
         targetSdk = 36
-        versionCode = 50
-        versionName = if (universal) "0.3.1-universal-b13" else "0.3.1-s23-b13"
+        versionCode = 51
+        versionName = if (universal) "0.3.1-universal-b14" else "0.3.1-s23-b14"
         manifestPlaceholders["appLabel"] = if (universal) "BOTW Universal" else "BOTW S23"
         ndk {
             abiFilters += "arm64-v8a"
@@ -103,6 +103,10 @@ val prepareBotwRecompAndroid by tasks.registering {
     val touchActions = repo.resolve("assets/artwork/touch-actions-v1.png")
     val libs = listOf("libSDL3.so", "libshaderc_shared.so", "libavcodec.so", "libavformat.so", "libavutil.so", "libswscale.so")
     inputs.files(smaa, font, icon, background, touchSkin, touchActions)
+    // (S23) the Vulkan drivers the app comes with: src/drivers/catalogo.tsv and its packages
+    val drivers = file("src/drivers")
+    inputs.dir(drivers)
+    inputs.property("allDrivers", universal)
     inputs.files(libs.map { deps.resolve("lib/$it") }.filter { it.exists() })
     if (deps.resolve("gen").exists()) inputs.dir(deps.resolve("gen"))  // (the game code's builder, below)
     inputs.files(listOf("tools/gen.py", "tools/lifter.py", "tools/analyze.py", "tools/nso.py", "tools/passes.py", "tools/patches.py",
@@ -122,6 +126,20 @@ val prepareBotwRecompAndroid by tasks.registering {
         for (lib in libs)  // (FFmpeg's only once android/deps/build_ffmpeg.sh made them)
             if (deps.resolve("lib/$lib").exists()) deps.resolve("lib/$lib").copyTo(out.resolve("jniLibs/arm64-v8a/$lib"), overwrite = true)
         font.copyTo(out.resolve("assets/res/Baloo2-SemiBold.ttf"), overwrite = true)
+        // (S23) the drivers: every one in the catalogue for the Universal version, the Snapdragon 8 Gen 2's (group 8g2)
+        // for the S23 one - the app copies one out only when it's chosen (BOTWRecompAndroidActivity.installDriver)
+        val dOut = out.resolve("assets/drivers")
+        dOut.deleteRecursively()
+        dOut.mkdirs()
+        val keep = drivers.resolve("catalogo.tsv").readLines(Charsets.UTF_8).filter { l ->
+            l.isNotBlank() && (l.startsWith("#") || universal || l.split('\t').getOrElse(1) { "" }.split(',').contains("8g2"))
+        }
+        dOut.resolve("catalogo.tsv").writeText(keep.joinToString("\n", postfix = "\n"), Charsets.UTF_8)
+        for (l in keep) if (!l.startsWith("#")) {
+            val n = l.substringBefore('\t')
+            drivers.resolve(n).copyTo(dOut.resolve(n), overwrite = true)
+        }
+        drivers.resolve("LEIA-ME.txt").copyTo(dOut.resolve("LEIA-ME.txt"), overwrite = true)
         deps.resolve("fonts/DejaVuSans.ttf").copyTo(out.resolve("assets/res/DejaVuSans.ttf"), overwrite = true)
         icon.copyTo(out.resolve("assets/res/icon.png"), overwrite = true)
         background.copyTo(out.resolve("assets/res/launcher-background.png"), overwrite = true)
