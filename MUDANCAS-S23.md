@@ -212,6 +212,11 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - **Configurações recomendadas** desligam o controle de temperatura (antes ele ficava como estava).
 - **Sensibilidade da mira:** com o sensor de movimento ligado, quem mira o arco e os arremessos é o celular, e o arrasto
   nesses botões é ignorado: a barra não mudava nada. A tela agora avisa que, nesse caso, ela só muda a Mira pelo dedo.
+- **Movimento pelos analógicos** (pedido do Moab, para os quebra-cabeças de movimento dos santuários): no menu do app,
+  aba Sistema > Controles. O analógico esquerdo inclina o controle até 60° para qualquer lado e volta reto ao soltar; o
+  direito gira mais e deixa onde parou, para virar o quebra-cabeça de cabeça para baixo. Enquanto ligado, os analógicos
+  não mexem o personagem nem a câmera, o sensor do celular fica de lado e um aviso no alto da tela mostra que está
+  ligado. Não fica salvo: o app sempre abre com ele desligado.
 - A lista de pipelines conhecidos é gravada sem segurar a trava que a linha de desenho usa a cada pipeline novo.
 - "conectado" em português.
 - O código do jogo não muda (instala por cima, sem recompilar). **Não foi testada jogando.**
