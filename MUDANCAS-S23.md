@@ -217,6 +217,10 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
   direito gira mais e deixa onde parou, para virar o quebra-cabeça de cabeça para baixo. Enquanto ligado, os analógicos
   não mexem o personagem nem a câmera, o sensor do celular fica de lado e um aviso no alto da tela mostra que está
   ligado. Não fica salvo: o app sempre abre com ele desligado.
+- **Botão rápido do movimento pelos analógicos:** opção "Botão rápido na tela", logo abaixo (fica salva, vem desligada).
+  Aparece um botão no canto de cima à esquerda: um toque liga ou desliga o movimento pelos analógicos sem abrir o menu
+  (ele acende quando está ligado). Segurando e arrastando, ele vai para qualquer lugar da tela, como o painel de
+  desempenho, e fica onde for deixado. O toque nele não vai para o jogo.
 - A lista de pipelines conhecidos é gravada sem segurar a trava que a linha de desenho usa a cada pipeline novo.
 - "conectado" em português.
 - O código do jogo não muda (instala por cima, sem recompilar). **Não foi testada jogando.**
