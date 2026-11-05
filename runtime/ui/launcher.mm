@@ -1528,6 +1528,20 @@ void launcher_video_options(void) {
     changed |= opt_toggle("Temperature control", &g_settings.heat_control, false,
                           "When the phone gets hot, the 3D image gets a little softer in steps, to delay the system cutting the "
                           "GPU, and sharper again when it cools down. Each change can show a short hitch. Applies at once.");
+    if (g_settings.heat_control) {  // (S23 b13: nvn/output_scale.c heat_factor)
+        opt_indent(1);
+        const char *modes[] = {"Android's warning", "Chip temperature"};
+        changed |= opt_choice("How it decides", &g_settings.heat_mode, modes, 2, 0,
+                              "Android's warning: the system's own heat warning, which comes just before it cuts the GPU - for a "
+                              "phone as it came. Chip temperature: only when the chip (SoC, as the performance overlay shows it) "
+                              "passes the limit below - for a phone whose system throttling was turned off (Brevent, AxManager "
+                              "and the like), where the warning comes without any cut. Applies at once.");
+        if (g_settings.heat_mode == 1)
+            changed |= opt_int("Chip limit", &g_settings.heat_limit, 75, 95, 5, 85, "%d \xc2\xb0" "C",
+                               "The chip temperature where the image starts getting softer. It gets sharper again 8 \xc2\xb0" "C "
+                               "below it. Applies at once.");
+        opt_indent(-1);
+    }
 
     opt_section("Advanced");
     {   // (runtime/settings.h gpu_heap / inplace_reads / turnip_lrz / log_file: for GPUs where a Turnip path draws wrong)
@@ -1916,6 +1930,9 @@ static void recommended_apply(bool lighter) {
     g_settings.shader_workers = 0;
     g_settings.force_aniso = 0;
     g_settings.turnip_mode = 0;
+    // (S23 b13: the temperature control off too - it stayed on through the recommended settings, and on a phone whose
+    // system throttling is off it cut the scene without need)
+    g_settings.heat_control = false;
     settings_save();
     std::string d = driver_recommended();
     if (!d.empty() && access((drivers_dir() + "/" + d).c_str(), F_OK) == 0) driver_set_active(d);
@@ -1993,11 +2010,12 @@ static void blocks_rows(float sc) {
     if (g_block_open < 0) {
         opt_section("Recommended");
         const char *rec = "The settings tested on the Galaxy S23 Ultra, with the driver for this phone: 30 fps, 1x resolution, 1080 lines, "
-                          "FSR 1 and native game code. Your screen shape, sound, controls, mods and game saves stay as they are. On "
-                          "another phone the result may differ.";
+                          "FSR 1, native game code and the temperature control off. Your screen shape, sound, controls, mods and "
+                          "game saves stay as they are. On another phone the result may differ.";
         const char *light = "Lighter settings for the Galaxy S23, S23+ and weaker phones, with the driver for this phone: 30 fps, 75% "
-                            "resolution, 900 lines, FSR 1 and native game code. The image is softer. They weren't tested on those "
-                            "phones. Your screen shape, sound, controls, mods and game saves stay as they are.";
+                            "resolution, 900 lines, FSR 1, native game code and the temperature control off. The image is softer. "
+                            "They weren't tested on those phones. Your screen shape, sound, controls, mods and game saves stay as "
+                            "they are.";
         if (!g_rec_ask) {
             if (opt_action("Use the recommended settings", "S23 Ultra", rec, false)) g_rec_ask = 1;
             if (opt_action("Use the lighter settings", "S23, S23+ and weaker", light, false)) g_rec_ask = 2;

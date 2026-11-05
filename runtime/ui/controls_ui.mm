@@ -98,6 +98,10 @@ static void touch_layout_draw(void) {
         ImGui::SetNextItemWidth(-1);
         if (ImGui::SliderFloat("##AimSens", &as, 25, 400, "%.0f%%")) g_settings.touch_aim_sens = as / 100;
         if (ImGui::IsItemDeactivatedAfterEdit()) settings_save();
+        // (S23 b13) with motion controls on the phone aims the bow and throws (touch_controls.mm recompute): the drag
+        // on those buttons is left out, and this slider counts only for Aim by dragging - said, not silent
+        if (g_settings.motion)
+            hint("Motion controls are on: the phone aims the bow and throws, so this only changes Aim by dragging below.");
         if (ImGui::Checkbox(tr("Aim by dragging (experimental)"), &g_settings.touch_drag_gyro)) settings_save();
         hint("With motion controls on: while the bow is held, a finger dragged on the screen turns the aim as turning the "
              "phone would - faster than the stick's top speed. Uses the aim sensitivity above.");
