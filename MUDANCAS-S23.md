@@ -241,7 +241,12 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - **Só o escolhido é copiado** para o celular (antes, todos os que vinham no app eram copiados).
 - Os de 01/11 saíram (os de 05/11 são mais novos); os que já tinham sido copiados continuam na lista.
 - Drivers da Qualcomm não vêm no app (não podem ser redistribuídos): o botão Adicionar driver continua.
-- **Não foi testada jogando.**
+- **Testada no S23 Ultra (05/11/2026):** a tela de drivers abriu com a linha deste celular e a aba do 8 Gen 2;
+  escolher o Gen8 V38 Patched copiou o driver na hora e o jogo abriu com ele; de volta ao Banners One UI, 10 minutos
+  medidos sem nenhum erro de driver.
+- **Achado do teste:** as quedas para 15-20 FPS vieram do calor da bateria, não do driver. Com a bateria a 39,5 °C, o
+  sistema prendeu a GPU em 295 MHz (de 719) e o processador pela metade, com o chip a só 55 °C. Com cooler, bateria a
+  31 °C: tudo liberado e 30 FPS cravados por 8 minutos. Para comparar drivers, compare com a bateria fria.
 
 ## O que não foi modificado
 
