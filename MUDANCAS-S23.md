@@ -204,6 +204,18 @@ A geração de quadros também entrou nessa versão, mas foi retirada na b7.
 - **Não foi testada jogando** antes de publicar: compilada e conferida, mas o dono do aparelho de testes estava
   dormindo. A b11 continua disponível.
 
+### b13: consertos vindos da análise do TOTK (05/11/2026)
+
+- **Controle de temperatura:** escolha de como decide, pelo aviso do Android (como antes) ou pela temperatura do chip,
+  com o limite de 75 a 95 °C (85 por padrão). No S23 com o limitador térmico do sistema desligado, o aviso do Android
+  vinha com o chip a 70-76 °C e cortava a cena de 100% para 70% em 40 segundos sem precisar.
+- **Configurações recomendadas** desligam o controle de temperatura (antes ele ficava como estava).
+- **Sensibilidade da mira:** com o sensor de movimento ligado, quem mira o arco e os arremessos é o celular, e o arrasto
+  nesses botões é ignorado: a barra não mudava nada. A tela agora avisa que, nesse caso, ela só muda a Mira pelo dedo.
+- A lista de pipelines conhecidos é gravada sem segurar a trava que a linha de desenho usa a cada pipeline novo.
+- "conectado" em português.
+- O código do jogo não muda (instala por cima, sem recompilar). **Não foi testada jogando.**
+
 ## O que não foi modificado
 
 - As ferramentas de compilação no celular e a identificação do código do jogo: `gen.id` e `GAMELIB_ID` são os mesmos
