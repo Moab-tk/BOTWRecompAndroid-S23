@@ -775,6 +775,15 @@ static void tab_about(void) {
     if (toggle("Phone motion like the Switch's screen", &g_settings.motion_flat)) settings_save();  // (hle/motion.c, #211 #247)
     hint("Off: the phone moves the aim as a controller would. On: as the Switch's own screen in handheld mode - try it if "
          "tilting the phone turns the aim, and turning it tilts.");
+    {   // (S23: hle/motion.c - not saved, off at every start)
+        extern volatile bool g_stick_motion;
+        bool on = g_stick_motion;
+        if (toggle("Motion with the sticks", &on)) g_stick_motion = on;
+    }
+    hint("For the shrines' motion puzzles. The left stick tilts the controller, any way, and it goes back to flat when you "
+         "let go. The right stick turns it further and leaves it there, to turn a puzzle upside down. Meanwhile the sticks "
+         "don't move the player or the camera, and the phone's sensor is left out. Turn it off after the puzzle; it's "
+         "off again whenever the app starts.");
     ImGui::Spacing();
     controls_bindings_draw(ImGui::GetFontSize() / 34);
     ImGui::Spacing();
@@ -1347,7 +1356,8 @@ void menu_render(void *cmd, uint32_t target_w, uint32_t target_h) {
 #else
     bool touch = false;
 #endif
-    if (!open && !kbd && !g_settings.show_fps && !touch) {
+    extern volatile bool g_stick_motion;  // (S23: its note at the top of the screen, below)
+    if (!open && !kbd && !g_settings.show_fps && !touch && !g_stick_motion) {
         if (g_inited) { pthread_mutex_lock(&q_lock); q_events.clear(); pthread_mutex_unlock(&q_lock); }
         return;
     }
@@ -1413,6 +1423,15 @@ void menu_render(void *cmd, uint32_t target_w, uint32_t target_h) {
 #ifdef __ANDROID__
     {   // (on top of the game, under the menu: hidden while it is open)
         touch_controls_draw(io.DisplaySize, g_font_big ? g_font_big : ImGui::GetFont());
+        if (g_stick_motion && !open) {  // (S23) the sticks are the motion controller now: said on the screen
+            const char *t = tr("Motion with the sticks: on");
+            ImDrawList *dl = ImGui::GetForegroundDrawList();
+            float fs = ImGui::GetFontSize() * 0.8f;
+            ImVec2 sz = ImGui::GetFont()->CalcTextSizeA(fs, FLT_MAX, 0, t), p((io.DisplaySize.x - sz.x) * 0.5f, 14 * scale);
+            dl->AddRectFilled(ImVec2(p.x - 14 * scale, p.y - 6 * scale), ImVec2(p.x + sz.x + 14 * scale, p.y + sz.y + 6 * scale),
+                              IM_COL32(0, 0, 0, 150), 10 * scale);
+            dl->AddText(ImGui::GetFont(), fs, p, IM_COL32(120, 230, 190, 255), t);
+        }
     }
 #endif
 
